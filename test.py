@@ -2,9 +2,10 @@ import subprocess
 import time
 import os
 import sys
+os.system("chcp 65001 > nul")
 os.chdir(".\\build\\main\\bin")
 EXE = ".\\start.bat"
-os.system("chcp 936 > nul")
+
 process = subprocess.Popen([EXE], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 # process.stdin.write("no\n".encode("gbk"))
 # process.stdin.close()

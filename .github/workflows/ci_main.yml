@@ -10,6 +10,8 @@ on:
 jobs:
     build:
         runs-on: windows-latest
+        env:
+            PYTHONIOENCODING: utf-8
         steps:
         - uses: actions/checkout@v3
         - name: Set up Python
@@ -39,4 +41,3 @@ jobs:
           run: |
                 cmd.exe /c "clean.bat"
 
-                
