@@ -1,0 +1,3 @@
+ECHO.%INFO%脚本版本为1.2.5%RESET%
+ECHO.%INFO%更新日志：%RESET%
+ECHO.%INFO%1.修复与优化%RESET%

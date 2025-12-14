@@ -1,0 +1,1 @@
+dd if=/data/rec.img of=/dev/block/bootdevice/by-name/recovery

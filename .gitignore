@@ -1,0 +1,8 @@
+.venv/
+build/
+/run_cmd.spec
+/bin.7z
+/bin1.7z
+/AllToolBox-src.zip
+/whoyou.txt
+.vscode/
