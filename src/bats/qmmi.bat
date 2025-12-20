@@ -47,15 +47,12 @@ call edlport
 ECHO %INFO%如果长时间卡死在这里，可能是已经引导了，请尝试用qfil手刷
 QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn >nul
 ECHO %INFO%开始刷入misc%RESET%
-call edlport
 fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
 ECHO %INFO%执行重启%RESET%
-call edlport
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
-ECHO %INFO%刷入完成，按任意键返回%RESET%
-pause >nul
+ECHO %INFO%已进入QMMI%RESET%
 exit /b
 
 :otherpash
@@ -71,13 +68,10 @@ ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
 QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn >nul
 ECHO %INFO%开始刷入misc%RESET%
-call edlport
 fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
 ECHO %INFO%执行重启%RESET%
-call edlport
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
-ECHO %INFO%刷入完成，按任意键返回%RESET%
-pause >nul
+ECHO %INFO%已进入QMMI%RESET%
 exit /b

@@ -5,14 +5,15 @@ cd /d bin 2>nul 1>nul
 ECHO.
 ECHO [–≈œ¢]’˝‘⁄∆Ù∂Ø÷–...
 ECHO [–≈œ¢]ºÏ≤ÈœµÕ≥±‰¡ø[PATH]...
-set PATH=%PATH%;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;%cd%\
+set PATH=%PATH%;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;%cd%
 ECHO [–≈œ¢]ºÏ≤ÈœµÕ≥±‰¡ø[PATHEXT]...
-set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;
+set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
 title XTC AllToolBox by xgj_236
 call withone
 call afterup
 ECHO [–≈œ¢]’˝‘⁄Œ™ƒ„µƒcmd»æ…œ—’…´...
 call color
+set /p="%cd%" <nul | find " " 1>nul 2>nul && ECHO %ERROR%µ±«∞π§æﬂÀ˘‘⁄¬∑æ∂∫¨”–ø’∏Ò£¨«Î≥¢ ‘Ω´π§æﬂ“∆∂ØµΩ∆‰À˚Œª÷√%RESET%&& pause&&exit /b
 ECHO %INFO%’˝‘⁄ºÏ≤È∏¸–¬...%RESET%
 call upall run
 ECHO %INFO%’˝‘⁄ºÏ≤ÈWindows Ù–‘...%RESET%
@@ -44,6 +45,7 @@ pause >nul
 goto menu
 
 :menu
+setlocal enabledelayedexpansion
 del /Q /F .\dir.tmp 1>nul 2>nul
 CLS
 call logo
@@ -67,7 +69,7 @@ ECHO ®^®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®
 ECHO.%RESET%
 set /p MENU=%YELLOW%«Î ‰»Î–Ú∫≈≤¢∞¥œ¬ªÿ≥µº¸£∫%RESET%
 for %%a in (dir_!MENU!) do set "modmain=!%%a!"
-if "%MENU%"=="1" CLS & call root & goto MENU
+if "%MENU%"=="1" CLS & call root & ENDLOCAL & goto MENU
 if "%MENU%"=="2" CLS & cmd /k & goto MENU
 if "%MENU%"=="3" CLS & call upall up & goto MENU
 if "%MENU%"=="4" goto about
@@ -147,7 +149,7 @@ set /p MENU=%YELLOW%«Î ‰»Î–Ú∫≈≤¢∞¥œ¬ªÿ≥µº¸£∫%RESET%
 if "%MENU%"=="A" goto MENU
 if "%MENU%"=="a" goto MENU
 if "%MENU%"=="1" CLS & call qmmi & pause & goto control
-if "%MENU%"=="2" CLS & start scrcpy-noconsole.vbs & goto control
+if "%MENU%"=="2" CLS & device_check.exe adb & start scrcpy-noconsole.vbs & goto control
 if "%MENU%"=="3" CLS & call listbuild & goto control
 if "%MENU%"=="4" CLS & call opencharge & goto control
 if "%MENU%"=="5" CLS & call innermodel & ECHO.%YELLOW%∞¥»Œ“‚º¸∑µªÿ%RESET% & pause >nul & goto control
@@ -190,7 +192,7 @@ call logo
 ECHO %ORANGE%–°ÃÏ≤≈∑˛ŒÒ≤Àµ•%YELLOW%
 ECHO ®X®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®[
 ECHO ®UA.∑µªÿ…œº∂≤Àµ•                    ®U
-ECHO ®U1.Ãÿ ‚π¶ƒ‹ ÷±Ì«øº”∫√”—            ®U
+ECHO ®U1. ÷±Ì«øº”∫√”—[“—∆˙”√]            ®U
 ECHO ®U2.ADB/◊‘ºÏ–£—È¬Îº∆À„              ®U
 ECHO ®U3.¿ÎœﬂOTA…˝º∂                     ®U
 ECHO ®^®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®a
@@ -269,24 +271,26 @@ ECHO %ORANGE%∞Ô÷˙”Î¡¥Ω”%YELLOW%
 ECHO ®X®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®[
 ECHO ®UA.∑µªÿ…œº∂≤Àµ•                    ®U
 ECHO ®U1.‘∂≥Ã–≠÷˙                        ®U
-ECHO ®U2.≥¨º∂ª÷∏¥Œƒº˛œ¬‘ÿ[z1-z10]        ®U
-ECHO ®U3.¿ÎœﬂotaŒƒº˛œ¬‘ÿ[z1-z11]         ®U
-ECHO ®U4.√Êæﬂƒ£øÈŒƒº˛œ¬‘ÿ                ®U
-ECHO ®U5.”¶”√apkŒƒº˛œ¬‘ÿ                 ®U
-ECHO ®U6.¥Úø™π§æﬂœ‰πŸÕ¯                  ®U
-ECHO ®U7.¥Úø™ø™∑¢Œƒµµ                    ®U
+ECHO ®U2.123‘∆≈ÃΩ‚≥˝œ¬‘ÿœﬁ÷∆             ®U
+ECHO ®U3.≥¨º∂ª÷∏¥Œƒº˛œ¬‘ÿ                ®U
+ECHO ®U4.¿ÎœﬂotaŒƒº˛œ¬‘ÿ                 ®U
+ECHO ®U5.√Êæﬂƒ£øÈŒƒº˛œ¬‘ÿ                ®U
+ECHO ®U6.”¶”√apkŒƒº˛œ¬‘ÿ                 ®U
+ECHO ®U7.¥Úø™π§æﬂœ‰πŸÕ¯                  ®U
+ECHO ®U8.¥Úø™ø™∑¢Œƒµµ                    ®U
 ECHO ®^®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®T®a
 ECHO.%RESET%
 set /p MENU=%YELLOW%«Î ‰»Î–Ú∫≈≤¢∞¥œ¬ªÿ≥µº¸£∫%RESET%
 if "%MENU%"=="A" goto MENU
 if "%MENU%"=="a" goto MENU
 if "%MENU%"=="1" CLS & call todesk & goto help
-if "%MENU%"=="2" CLS & start https://www.123865.com/s/Q5JfTd-hEbWH & goto help
-if "%MENU%"=="3" CLS & start https://www.123865.com/s/Q5JfTd-HEbWH & goto help
-if "%MENU%"=="4" CLS & start https://www.123684.com/s/Q5JfTd-cEbWH & goto help
-if "%MENU%"=="5" CLS & start https://www.123684.com/s/Q5JfTd-ZEbWH & goto help
-if "%MENU%"=="6" CLS & start https://atb.xgj.qzz.io & goto help
-if "%MENU%"=="7" CLS & echo.%WHITE% & type ø™∑¢Œƒµµ.txt & echo. & pause & goto help
+if "%MENU%"=="1" CLS & call patch123 & goto help
+if "%MENU%"=="3" CLS & start https://www.123865.com/s/Q5JfTd-hEbWH & goto help
+if "%MENU%"=="4" CLS & start https://www.123865.com/s/Q5JfTd-HEbWH & goto help
+if "%MENU%"=="5" CLS & start https://www.123684.com/s/Q5JfTd-cEbWH & goto help
+if "%MENU%"=="6" CLS & start https://www.123684.com/s/Q5JfTd-ZEbWH & goto help
+if "%MENU%"=="7" CLS & start https://atb.xgj.qzz.io & goto help
+if "%MENU%"=="8" CLS & echo.%WHITE% & type ø™∑¢Œƒµµ.txt & echo. & pause & goto help
 ECHO %ERROR% ‰»Î¥ÌŒÛ£¨«Î÷ÿ–¬ ‰»Î£°%RESET%
 timeout /t 2 >nul
 goto help

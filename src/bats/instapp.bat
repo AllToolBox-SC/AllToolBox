@@ -56,7 +56,7 @@ echo %INFO% 正在安装应用...%RESET%
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
 REM 执行安装并将输出重定向到临时文件
-adb install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
+adb wait-for-device install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
 
 REM 检查输出中是否包含Success
 find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
@@ -115,7 +115,7 @@ for %%i in (%sel__files:/= %) do (
     for %%A in ("%%i") do set SIZE_BYTES=%%~zA
     
     REM 执行安装并将输出重定向到临时文件
-    adb install -r -t -d "%%i" > ".\tmp\instapptmp.txt" 2>&1
+    adb wait-for-device install -r -t -d "%%i" > ".\tmp\instapptmp.txt" 2>&1
     
     REM 检查输出中是否包含Success
     find /i "Success" ".\tmp\instapptmp.txt" >nul
@@ -190,7 +190,7 @@ for /l %%n in (1,1,!COUNT!) do (
     echo %CYAN%正在安装: !filename!%RESET%
     
     REM 执行安装并将输出重定向到临时文件
-    adb install -r -t -d "!file!" > ".\tmp\instapptmp.txt" 2>&1
+    adb wait-for-device install -r -t -d "!file!" > ".\tmp\instapptmp.txt" 2>&1
     
     REM 检查输出中是否包含Success
     find /i "Success" ".\tmp\instapptmp.txt" >nul
@@ -329,16 +329,16 @@ echo %CYAN%正在安装：%RESET%%PINK%%sel__file_path%%RESET%
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
 REM 执行安装并将输出重定向到临时文件
-adb install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
+adb wait-for-device install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
 
 REM 检查输出中是否包含Success
 find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
 if !errorlevel! equ 0 (
     echo %GREEN% 安装成功！%RESET%
 ) else (
-    echo %ERROR% 安装失败！按任意键重试...%RESET%
     if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    pause >nul
+    set /p yesno=%ERROR% 安装失败！按任意键重试...[输入no可跳过]%RESET%
+    if "%yesno%"=="no" exit /b
     goto callinst
 )
 

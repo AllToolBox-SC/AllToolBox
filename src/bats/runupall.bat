@@ -36,6 +36,6 @@ ECHO.[信息]更新成功！
 ECHO.[信息]更新成功！
 ECHO.[信息]更新成功！
 set /p="3" <nul > .\bin\whoyou.txt
-start 双击运行.exe
+start "双击运行.exe"
 powershell -Command "Start-Sleep -Milliseconds 1000; Remove-Item -Path '%~f0' -Force"
 exit

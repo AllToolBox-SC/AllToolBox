@@ -12,10 +12,10 @@ echo %INFO%当前运行环境:%os_name%_%arch%_%os_version%%RESET%
 set "os_name=%os_name: =%"
 
 :: 检查系统版本
-echo !os_name! | findstr /i "Windows 11" >nul && echo %INFO%当前系统: Windows 11%RESET% && exit /b
-echo !os_name! | findstr /i "Windows 10" >nul && echo %INFO%当前系统: Windows 10%RESET% && exit /b
-echo !os_name! | findstr /i "Windows 8.1" >nul && echo %INFO%当前系统: Windows 8.1%RESET% && exit /b
-echo !os_name! | findstr /i "Windows 8" >nul && echo !os_name! | findstr /iv "8.1" >nul && echo %INFO%当前系统: Windows 8%RESET% && exit /b
+echo !os_name! | find "Windows11" >nul && echo %INFO%当前系统: Windows 11%RESET% && exit /b
+echo !os_name! | find "Windows10" >nul && echo %INFO%当前系统: Windows 10%RESET% && exit /b
+echo !os_name! | find "Windows8.1" >nul && echo %INFO%当前系统: !os_name!%RESET% && exit /b
+echo !os_name! | find "Windows8" >nul && echo %INFO%当前系统: !os_name!%RESET% && exit /b
 
 echo %ERROR%此脚本需要 Windows 8 或更高版本%RESET%
 

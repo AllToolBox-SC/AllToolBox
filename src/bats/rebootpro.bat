@@ -38,17 +38,20 @@ ECHO %ORANGE%选择该如何引导?%YELLOW%
 ECHO ═════════════════════════════
 ECHO 1.高版本[z6巅峰版及以上]
 ECHO 2.低版本[z6及以下]
+ECHO 3.跳过引导
 ECHO ═════════════════════════════
 ECHO.%RESET%
 set /p mbnMENU=%YELLOW%请输入序号并按下回车键：%RESET%
 if "%mbnMENU%"=="1" set whatmbn=msm8937.mbn & goto rebootP-reboot-edl-run
 if "%mbnMENU%"=="2" set whatmbn=msm8909w.mbn & goto rebootP-reboot-edl-run
+if "%mbnMENU%"=="3" goto noQS
 ECHO %ERROR%输入错误，请重新输入！%RESET%
 timeout /t 2 >nul
 goto rebootP-reboot-edl
 :rebootP-reboot-edl-run
 call edlport
 QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\%whatmbn%
+:noQS
 call edlport
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%完成！，按任意键继续%RESET%

@@ -1,6 +1,6 @@
 #include "launch.h"
 
-const std::wstring RUN_BAT_CMD = L"cmd.exe /c call start.bat";
+const std::wstring RUN_BAT_CMD = L"main.exe";
 
 BOOL IsRunAsAdmin()
 {
@@ -86,7 +86,7 @@ void RunMainBat()
 
 int wmain()
 {
-    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleOutputCP(CP_WINANSI);
     if (!IsRunAsAdmin())
     {
         ElevatePrivileges();

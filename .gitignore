@@ -6,3 +6,4 @@ build/
 /AllToolBox-src.zip
 /whoyou.txt
 .vscode/
+/Cargo.lock

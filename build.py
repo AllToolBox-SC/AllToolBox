@@ -52,13 +52,17 @@ def main():
     subprocess.run(["windres.exe", "-i", "./src/launch.rc", "-o", "./build/icon.o"])
     subprocess.run(["g++.exe", "-static", "./src/launch.cpp", "./build/icon.o", "-municode", "-o", "build/main/双击运行.exe".encode("utf-8"), "-lstdc++", "-lpthread"])
     os.makedirs("./build/main/bin", exist_ok=True)
+    os.makedirs("./build/jsonutil", exist_ok=True)
     if not os.path.exists("./.venv/Scripts/python.exe"):
         venv.create("./.venv", with_pip=True)
     subprocess.run([os.path.join("./.venv", "Scripts", "pip.exe"), "install", "-r", "requirements.txt"])
     if not os.path.exists("./build/py"):
         os.makedirs("./build/py")
     os.makedirs("./build/py/dist", exist_ok=True)
+    print(os.getcwd())
     subprocess.run([os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", "./build/py/dist", "src/run_cmd.py"])
+    subprocess.run([os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", "./build/py/dist", "src/start.py"])
+    subprocess.run(["cargo", "build", "--release", "--target-dir", "./build/jsonutil"], shell=True)
     with py7zr.SevenZipFile('bin.7z', mode='r') as z:
         z.extractall(path='./build/main/bin')
 
@@ -73,6 +77,8 @@ def main():
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
             shutil.copy2(src_path, dst_path)
     shutil.copy2("./build/py/dist/run_cmd.exe", "./build/main/bin/run_cmd.exe")
+    shutil.copy2("./build/py/dist/start.exe", "./build/main/bin/main.exe")
+    shutil.copy2("./build/jsonutil/release/jsonutil.exe", "./build/main/bin/jsonutil.exe")
     print("Build completed.")
 
     return 0

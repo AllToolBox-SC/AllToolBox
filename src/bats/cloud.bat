@@ -29,15 +29,15 @@ if %errorlevel% neq 0 (
    pause >nul
 )
 echo %GREEN%下载完成%RESET%
-echo.
-echo %INFO%开始下载%RESET%
-call curltool.bat https://vip.123pan.cn/1814215835/xtc_root/xtcpatch/xtcpatch.zip -o tmp\xtcpatch.zip
-if %errorlevel% neq 0 (
-   echo %ERROR%下载文件时出现错误，错误值:%errorlevel%，按任意键跳过
-   pause >nul
-)
-echo %GREEN%下载完成%RESET%
-echo.
+::echo.
+::echo %INFO%开始下载%RESET%
+::call curltool.bat https://vip.123pan.cn/1814215835/xtc_root/xtcpatch/xtcpatch.zip -o tmp\xtcpatch.zip
+::if %errorlevel% neq 0 (
+::   echo %ERROR%下载文件时出现错误，错误值:%errorlevel%，按任意键跳过
+::   pause >nul
+::)
+::echo %GREEN%下载完成%RESET%
+::echo.
 echo %INFO%开始下载%RESET%
 call curltool.bat https://vip.123pan.cn/1814215835/xtc_root/444xposed.zip -o tmp\xposed.zip
 if %errorlevel% neq 0 (

@@ -19,7 +19,8 @@ set "PINK=%ESC%[95m"
 set "CYAN=%ESC%[96m"
 set "WHITE=%ESC%[97m"
 
-set "ORANGEPRO=%ESC%[38;5;208m"
+::set "ORANGEPRO=%ESC%[38;5;208m"
+set "ORANGEPRO=%ESC%[33m"
 
 set "RESET=%ESC%[0m"
 set "ERROR=%ESC%[31m[´íÎó]%ESC%[91m"

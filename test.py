@@ -23,12 +23,12 @@ except:
 try:
     print("STDOUT:")
     print(stdout.decode("gbk"))
-    print("STDERR: (ignore the unsupported redirection error)")
+    print("STDERR:")
     print(stderr.decode("gbk").replace('错误: 不支持输入重新定向，立即退出此进程。\r\n', ''))
 except (UnicodeEncodeError, UnicodeDecodeError):
     print(stdout.decode("utf-8", errors="ignore"))
-    print("STDERR: (ignore the unsupported redirection error)")
-    print(stderr.decode("utf-8", errors="ignore").replace('错误: 不支持输入重新定向，立即退出此进程。\r\n'))
+    print("STDERR:")
+    print(stderr.decode("utf-8", errors="ignore").replace('错误: 不支持输入重新定向，立即退出此进程。\r\n', ''))
 
 try:
     str_stdout = stdout.decode("gbk")

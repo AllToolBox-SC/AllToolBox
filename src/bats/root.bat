@@ -1,4 +1,19 @@
+:roottmp
+CLS
+if exist .\roottmp.txt (
+    echo.%WARN%“断点续刷”是一个测试性功能
+    echo.%WARN%可能会出现未知问题，如果出现问题，请超级恢复
+    echo.%YELLOW%你上一次的一键root可能没有完成，需要从断开位置继续吗?
+    set /p yesno=%YELLOW%输入yes继续输入no将删除未完成记录：%RESET%
+    set /p roottmp=<roottmp.txt
+    if "!yesno!"=="yes" goto %roottmp%
+    if "!yesno!"=="no" del /Q /F .\roottmp.txt
+    if "!yesno!"=="y" goto %roottmp%
+    if "!yesno!"=="n" del /Q /F .\roottmp.txt
+    goto roottmp
+)
 if "%1"=="" goto ROOT
+set /p="1" <nul > nouserdata.txt
 set nouserdata=1
 ECHO.%INFO%你选择了不刷userdata，这可能导致设备出现问题
 pause
@@ -95,6 +110,7 @@ for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.innermode
 echo %INFO%您的设备innermodel为:%innermodel%
 if "%innermodel%"=="I25C" (
    set smodel=1
+   set /p="1" <nul > smodel.txt
    echo %WARN%此型号ROOT可能存在不稳定性问题，是否继续？
    pause
 )
@@ -107,6 +123,17 @@ echo %INFO%SDK版本号:%sdkversion%
 for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.current.softversion') do set version=%%i
 echo %INFO%版本号:%version%
 call isv3
+set /p="%isv3%" <nul > isv3.txt
+adb shell pm list packages | findstr "com.android.systemui" > nul
+if %errorlevel%==0 (
+    set havesystemui=1
+    set /p="1" <nul > havesystemui.txt
+    ECHO %GREEN%系统存在SystemUI
+) else (
+    set havesystemui=0
+    set /p="0" <nul > havesystemui.txt
+    ECHO %GREEN%系统不存在SystemUI
+)
 del /Q /F tmp.txt >nul 2>nul
 del /Q /F .\*.img >nul 2>nul
 del /Q /F .\tmp\boot.img >nul 2>nul
@@ -132,7 +159,6 @@ if %errorlevel% neq 0 (
    ECHO %ERROR%解压文件时出现错误，错误值:%errorlevel%
    ECHO %INFO%按任意键退出
    pause >nul
-   ENDLOCAL
    exit /b
 )
 if "%sdkversion%"=="19" (
@@ -148,11 +174,11 @@ if "%androidversion%"=="11" (
 ECHO %INFO%触发彩蛋：安卓11！
 ECHO.%ERROR%出错了
 pause
-ENDLOCAL
 exit /b
 )
 
-:ROOT-SDK19 
+:ROOT-SDK19
+set /p="ROOT-SDK19" <nul > roottmp.txt
 ECHO.%WARN%请注意检查驱动
 ECHO.%INFO%正在重启到bootloader模式，你的手表并没有变砖
 run_cmd "adb reboot bootloader"
@@ -182,19 +208,21 @@ adb reboot
 ECHO.%INFO%您的手表ROOT完毕
 ECHO.%INFO%删除临时文件
 del /Q /F .\EDL\rooting\*.*
+del /Q /F .\roottmp.txt
 ECHO.%INFO%5秒后返回主页%RESET%
 busybox sleep 5
 exit /b
 
 :ROOT-SDK25
+set /p="ROOT-SDK25" <nul > roottmp.txt
 echo %YELLOW%════════════════════════════════════════════════%RESET%
 ECHO.%ORANGE% 请选择一种方案
 ECHO. 1.BOOT方案[如果已经降级请选择此方案]
 ECHO. 2.Recovery方案[最新系统可使用此方案]
 echo %YELLOW%════════════════════════════════════════════════%RESET%
 set /p recorroot=%YELLOW%请输入序号并按下回车键：%RESET%
-if "%recorroot%"=="1" goto ROOT-SDK25-1
-if "%recorroot%"=="2" goto ROOT-SDK25-2
+if "%recorroot%"=="1" goto ROOT-SDK25-1&&set /p="%recorroot%" <nul > recorroot.txt
+if "%recorroot%"=="2" goto ROOT-SDK25-2&&set /p="%recorroot%" <nul > recorroot.txt
 ECHO %ERROR%输入错误，请重新输入！%RESET%
 timeout /t 2 >nul
 goto ROOT-SDK25
@@ -202,6 +230,8 @@ goto ROOT-SDK25
 :ROOT-SDK25-1
 ECHO.%INFO%重启您的手表至9008
 adb reboot edl
+:ROOT-SDK25-1-1
+set /p="ROOT-SDK25-1-1" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
 QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
@@ -215,6 +245,8 @@ if %errorlevel% neq 0 (
    pause
    exit /b
 )
+:ROOT-SDK25-1-2
+set /p="ROOT-SDK25-1-2" <nul > roottmp.txt
 ECHO.%INFO%开始修补boot
 call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt >nul
 ECHO.%INFO%解包boot
@@ -228,6 +260,8 @@ magiskboot repack boot.img 1>nul 2>nul
 ECHO.%INFO%BOOT处理完成!!!
 copy /Y new-boot.img EDL\rooting\boot.img > nul
 del /Q /F .\tmp\boot.img
+:ROOT-SDK25-1-3
+set /p="ROOT-SDK25-1-3" <nul > roottmp.txt
 ECHO.%INFO%刷入BOOT
 fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\boot.xml --noprompt >nul
 ECHO.%INFO%boot刷入完毕
@@ -239,6 +273,8 @@ goto ROOT-SDK25-wait
 :ROOT-SDK25-2
 ECHO.%INFO%重启您的手表至9008
 adb reboot edl
+:ROOT-SDK25-2-1
+set /p="ROOT-SDK25-2-1" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
 QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
@@ -252,6 +288,8 @@ if %errorlevel% neq 0 (
    pause
    exit /b
 )
+:ROOT-SDK25-2-2
+set /p="ROOT-SDK25-2-2" <nul > roottmp.txt
 ECHO.%INFO%开始修补boot
 call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt >nul
 ECHO.%INFO%解包boot
@@ -265,6 +303,8 @@ magiskboot repack boot.img 1>nul 2>nul
 ECHO.%INFO%BOOT处理完成!!!
 copy /Y new-boot.img EDL\rooting\recovery.img > nul
 del /Q /F .\tmp\boot.img
+:ROOT-SDK25-2-3
+set /p="ROOT-SDK25-2-3" <nul > roottmp.txt
 ECHO.%INFO%刷入BOOT至Recovery分区
 fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt >nul
 ECHO.%INFO%刷入misc
@@ -274,6 +314,7 @@ qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path
 ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
 
 :ROOT-SDK25-wait
+set /p="ROOT-SDK25-wait" <nul > roottmp.txt
 call boot_completed.bat
 ECHO.%INFO%安装管理器
 call instapp .\EDL\rooting\manager.apk
@@ -287,6 +328,8 @@ ECHO.%INFO%复制运行环境及刷入模块
 run_cmd "adb push 2100.sh /sdcard/"
 run_cmd "adb shell ""su -c sh /sdcard/2100.sh"""
 call instmodule2.bat tmp\xtcpatch.zip
+:ROOT-SDK25-wait-1
+set /p="ROOT-SDK25-wait-1" <nul > roottmp.txt
 ECHO.%INFO%安装Notice
 call instapp.bat .\apks\notice.apk
 ECHO.%INFO%安装第三方应用商店
@@ -294,12 +337,13 @@ call instapp.bat .\apks\appstore.apk
 call instapp.bat .\apks\appstore2.apk
 ECHO.%INFO%安装第三方安装器
 call instapp.bat .\apks\MoyeInstaller.apk
-run_cmd "adb shell am start -a android.intent.action.VIEW -d file:///sdcard/1.apk -t application/vnd.android.package-archive"
-ECHO.%INFO%请在手表端选择弦-安装器，点击始终，然后按任意键继续
-pause
+ECHO.%INFO%提示:如果需要在手表上安装应用，请在手表端选择弦-安装器，点击始终
+if exist .\recorroot.txt set /p recorroot=<recorroot.txt >nul
 if "%recorroot%"=="1" goto ROOT-SDK25-F
 ECHO.%INFO%重启您的手表至9008
 adb wait-for-device reboot edl
+:ROOT-SDK25-wait-2
+set /p="ROOT-SDK25-wait-2" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
 QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
@@ -310,13 +354,14 @@ fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=E
 ECHO.%INFO%重启手表
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 :ROOT-SDK25-F
+set /p="ROOT-SDK25-F" <nul > roottmp.txt
 device_check.exe adb qcom_edl&&ECHO.
 call boot_completed.bat
-adb shell magisk -v | find "MAGISK" 1>nul 2>nul || ECHO %ERROR%ROOT失败！发生错误，错误root-sdk25-F，请尝试换方案再次root&&ECHO.%INFO%按任意键返回&&pause&&ENDLOCAL&&exit /b
+adb shell magisk -v | find "MAGISK" 1>nul 2>nul || ECHO %ERROR%ROOT失败！发生错误，错误root-sdk25-F，请尝试换方案再次root&&ECHO.%INFO%按任意键返回&&pause&&exit /b
 ECHO.%INFO%您的手表已ROOT完毕
+del /Q /F .\roottmp.txt
 ECHO.%INFO%按任意键返回
 pause
-ENDLOCAL
 exit /b
 
 :ROOT-SDK27
@@ -325,6 +370,7 @@ adb reboot edl
 call edlport
 
 :ROOT-SDK27-Patch
+set /p="ROOT-SDK27-Patch" <nul > roottmp.txt
 ECHO.%INFO%发送引导
 QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8937.mbn >nul
 busybox sleep 2
@@ -337,6 +383,8 @@ if %errorlevel% neq 0 (
    pause
    exit /b
 )
+:ROOT-SDK27-Patch-1
+set /p="ROOT-SDK27-Patch-1" <nul > roottmp.txt
 busybox sleep 1
 ECHO.%INFO%开始修补boot
 call magiskpatch %cd%\tmp\boot.img %cd%\boot.img magisk.apk noprompt
@@ -352,7 +400,9 @@ magiskboot repack boot.img 1>nul 2>nul
 ECHO.%INFO%BOOT处理完成!!!
 copy /Y new-boot.img EDL\rooting\sboot.img > nul
 del /Q /F .\tmp\boot.img
-
+:ROOT-SDK27-Patch-2
+set /p="ROOT-SDK27-Patch-2" <nul > roottmp.txt
+if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%刷入recovery
 copy EDL\rooting\sboot.img EDL\rooting\recovery.img > nul
@@ -362,15 +412,18 @@ ECHO.%INFO%刷入boot，aboot，userdata，misc
 ECHO.%INFO%刷入recovery，aboot
 )
 fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\rawprogram0.xml --noprompt >nul
+:ROOT-SDK27-Patch-3
+set /p="ROOT-SDK27-Patch-3" <nul > roottmp.txt
+if exist .\nouserdata.txt set /p nouserdata=<nouserdata.txt >nul
 if "%nouserdata%"=="1" (
 ECHO.%INFO%重启手表
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%你选择了不刷userdata，不再继续
 ECHO.按任意键返回...
 pause >nul
-ENDLOCAL
 exit /b
 )
+if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%重启手表
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
@@ -382,6 +435,8 @@ fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=t
 ECHO.%INFO%重启手表
 qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%等待开机
+:ROOT-SDK27-Patch-4
+set /p="ROOT-SDK27-Patch-4" <nul > roottmp.txt
 device_check.exe fastboot&&ECHO.
 ECHO.%WARN%你的手表没有变砖!
 ECHO.%WARN%你的手表没有变砖!
@@ -403,6 +458,8 @@ ECHO.%WARN%请 不要 点击重启-重启并进入正常启动模式
 ECHO.%WARN%请 不要 点击重启-重启并进入正常启动模式
 
 :ROOT-SDK27-WAIT
+set /p="ROOT-SDK27-WAIT" <nul > roottmp.txt
+if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
 device_check.exe adb qcom_edl&&ECHO.
@@ -418,40 +475,81 @@ if not "%devicestatus%"=="adb" (
 ECHO.%ERROR%您的设备可能触发了Xse限制！请重新进行root
 ECHO.%ERROR%按任意键返回...
 pause > nul
-ENDLOCAL
 exit /b
 )
+:ROOT-SDK27-WAIT-1
+set /p="ROOT-SDK27-WAIT-1" <nul > roottmp.txt
 call boot_completed.bat
-ECHO.%WARN%接下来要在您的手表上完成一些操作，请按照工具提示一步步进行操作，期间禁止联网，重复绑定！
-ECHO.%INFO%请在3s后按任意键继续...
-timeout /t 3 /nobreak > nul
-pause
-ECHO.%INFO%正在启动投屏！如手表端不方便操作，可在电脑端进行操作
-ECHO.%INFO%提示：如果手表息屏，在投屏窗口单击右键即可
-start scrcpy-noconsole.vbs
+ECHO.%WARN%请一定要根据工具的提示来，root未完成前禁止联网，禁止重复绑定！
 run_cmd "adb shell setprop persist.sys.charge.usable true"
 ECHO.%INFO%充电可用已开启
 run_cmd "adb shell dumpsys battery unplug"
 ECHO.%INFO%已模拟未充电状态
 run_cmd "adb shell svc wifi disable"
 run_cmd "adb shell wm density 200"
+ECHO.%INFO%正在自动打开自动响应，请稍后
 run_cmd "adb shell am start -n com.topjohnwu.magisk/.ui.MainActivity"
-ECHO.%INFO%很好，现在请打开Magisk右上角设置，往下滑，找到自动响应，修改为允许，然后找到超级用户通知，修改为无，然后按任意键继续
+busybox.exe sleep 10
+run_cmd "adb shell input keyevent 4"
+run_cmd "adb shell am start -n com.topjohnwu.magisk/.ui.MainActivity"
+device_check.exe adb&&ECHO.
+adb shell input tap 304 26
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input tap 200 100
+adb shell input tap 200 230
+adb shell input tap 200 300
+adb shell input tap 200 140
+adb shell "su -c magisk -v" || echo.%ERROR%自动授予出错及手动授予权限&&goto magisk
+goto Edxposed
+:magisk
+ECHO.%INFO%正在启动投屏！如手表端不方便操作，可在电脑端进行操作
+ECHO.%INFO%提示：如果手表息屏，在投屏窗口单击右键即可
+start scrcpy-noconsole.vbs
+ECHO.%INFO%请打开Magisk右上角设置，往下滑，找到自动响应，修改为允许，然后找到超级用户通知，修改为无
+ECHO.%INFO%然后在主页点击超级用户，将所有开关打开
+ECHO.%INFO%操作完成后请按任意键继续
 pause
+adb shell "su -c magisk -v" || echo.%ERROR%授予出错，请重新授予&&goto magisk
+:Edxposed
 ECHO.%INFO%正在自动打开Edxposed Installer，请稍后
 device_check.exe adb qcom_edl&&ECHO.
 run_cmd "adb shell am start -n com.solohsu.android.edxp.manager/de.robv.android.xposed.installer.WelcomeActivity"
 busybox sleep 7
+run_cmd "adb shell am start -n com.huanli233.systemplus/.ActiveSelfActivity"
+ECHO.%INFO%正在自动激活，请稍后
+device_check.exe adb&&ECHO.
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input tap 200 200
+adb shell input swipe 160 60 160 300 100
+adb shell input swipe 160 60 160 300 100
+adb shell input tap 200 200
+adb shell input swipe 160 300 160 60 100
+adb shell input swipe 160 300 160 60 100
+adb shell input tap 200 120
+goto xposed-check
 :ROOT-Xposed
+ECHO.%INFO%正在启动投屏！如手表端不方便操作，可在电脑端进行操作
+ECHO.%INFO%提示：如果手表息屏，在投屏窗口单击右键即可
+start scrcpy-noconsole.vbs
 run_cmd "adb shell am start -n com.huanli233.systemplus/.ActiveSelfActivity"
 ECHO.%INFO%请往下滑，找到自激活，然后点击激活SystemPlus与激活核心破解，然后按任意键继续
 pause
+:xposed-check
 run_cmd "adb push systemplus.sh /sdcard/systemplus.sh"
 ECHO.%INFO%开始检查SystemPlus激活状态...
 for /f "delims=" %%i in ('adb wait-for-device shell sh /sdcard/systemplus.sh') do set systemplus=%%i
 if "%systemplus%"=="1" (
 ECHO.%ERROR%未激活
-ECHO.%ERROR%你没有激活SystemPlus！按任意键重回上一步
+ECHO.%ERROR%没有激活SystemPlus！按任意键重回上一步
 pause
 goto ROOT-Xposed
 )
@@ -461,14 +559,14 @@ ECHO.%INFO%开始检查核心破解激活状态...
 for /f "delims=" %%i in ('adb wait-for-device shell sh /sdcard/toolkit.sh') do set toolkit=%%i
 if "%toolkit%"=="1" (
 ECHO.%ERROR%未激活
-ECHO.%ERROR%你没有激活核心破解！按任意键重回上一步
+ECHO.%ERROR%没有激活核心破解！按任意键重回上一步
 pause
 goto ROOT-Xposed
 )
 ECHO.%INFO%已激活
-adb wait-for-device shell "dumpsys package com.solohsu.android.edxp.manager | grep userId="
-ECHO.%INFO%请输入最后上方显示的最后5位数字
-set /p chown=
+adb wait-for-device shell "dumpsys package com.solohsu.android.edxp.manager | grep userId=" >useridtmp
+call number useridtmp chown
+
 ECHO.%INFO%正在修改文件/data/user_de/0/com.solohsu.android.edxp.manager/conf/enabled_modules.list的所有者
 adb shell "su -c chown %chown% /data/user_de/0/com.solohsu.android.edxp.manager/conf/enabled_modules.list"
 
@@ -476,23 +574,36 @@ ECHO.%INFO%正在修改文件/data/user_de/0/com.solohsu.android.edxp.manager/conf/mod
 adb shell "su -c chown %chown% /data/user_de/0/com.solohsu.android.edxp.manager/conf/modules.list"
 ECHO.%INFO%稍等片刻，即将开始
 CLS
+:ROOT-SDK27-WAIT-2
+set /p="ROOT-SDK27-WAIT-2" <nul > roottmp.txt
 call logo
 ECHO.%ORANGE%--------------------------------------------------------------------
 ECHO.%PINK%-把时间交给我们-
 ECHO.%INFO%开始安装XTC Patch模块
 adb shell setprop persist.sys.ez true
-adb push tmp\xtcpatch.zip /sdcard/
+adb push tmp\xtcpatch.zip /sdcard/xtcpatch.zip
 adb shell setprop persist.sys.rooting true
 adb shell "su -c magisk --install-module /sdcard/xtcpatch.zip"
 run_cmd "adb shell setprop persist.sys.rooting false"
 run_cmd "adb shell ""rm -rf /sdcard/xtcpatch.zip"""
+ECHO.%INFO%安装XTC Patch模块成功
 run_cmd "adb shell wm density reset"
 run_cmd "adb shell pm clear com.android.packageinstaller"
+if "%havesystemui%"=="1" (
+  ECHO.%INFO%开始安装XTC Patch_SystemUI模块
+  adb push tmp\systemui.zip /sdcard/systemui.zip
+  adb shell "su -c magisk --install-module /sdcard/systemui.zip"
+  adb shell rm -rf /sdcard/systemui.zip
+  ECHO.%INFO%开始安装XTC Patch_SystemUI模块
+)
+ECHO.%INFO%重启手表
 run_cmd "adb reboot"
-ECHO.%INFO%安装XTC Patch模块成功
+:ROOT-SDK27-WAIT-3
+set /p="ROOT-SDK27-WAIT-3" <nul > roottmp.txt
 device_check.exe adb qcom_edl&&ECHO.
 ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
 call boot_completed.bat
+if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 busybox sleep 5
 adb shell "su -c sh /data/adb/modules/XTCPatch/active_module.sh com.huanli233.systemplus"
@@ -502,65 +613,77 @@ device_check.exe adb qcom_edl&&ECHO.
 call boot_completed.bat
 busybox sleep 5
 )
-busybox sleep 5
-ECHO.%INFO%开始安装一些必备应用,共计11个
-call instapp.bat .\apks\notice.apk
-call instapp.bat .\apks\wxzf.apk
-call instapp.bat .\apks\wcp2.apk
-call instapp.bat .\apks\appstore.apk
-call instapp.bat .\apks\appstore2.apk
-call instapp.bat .\apks\appmanager.apk
-call instapp.bat .\apks\personalcenter.apk
-call instapp.bat .\apks\MoyeInstaller.apk
-call instapp.bat .\apks\weichat.apk
-call instapp.bat .\apks\appsettings.apk
-call instapp.bat .\apks\vibrator.apk
-ECHO.%INFO%必备应用安装完成,重启手表
-adb reboot
-device_check.exe adb qcom_edl&&ECHO.
-ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
-call boot_completed.bat
-busybox sleep 5
+busybox sleep 10
 ECHO.%INFO%开始安装一些系统应用
 call instapp.bat .\apks\selftest.apk
+busybox sleep 1
 call instapp.bat .\apks\settings.apk
+busybox sleep 1
+if exist .\havesystemui.txt set /p havesystemui=<havesystemui.txt >nul
+if exist .\isv3.txt set /p isv3=<isv3.txt >nul
 if "%isv3%"=="1" (
-call instapp.bat .\apks\121750.apk
-)
-if "%isv3%"=="0" (
-call instapp.bat .\apks\116100.apk
+    if "%havesystemui%"=="1" (
+        call instapp.bat .\apks\130510.apk
+    ) else (
+        call instapp.bat .\apks\121750.apk
+    )
+) else (
+    call instapp.bat .\apks\116100.apk
 )
 ECHO.%INFO%系统应用安装完成
+if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%重启手表
-adb reboot
+run_cmd "adb reboot"
 ) else (
 ECHO.%INFO%擦除misc并重启
-adb reboot bootloader
+run_cmd "adb reboot bootloader"
 fastboot erase misc
 fastboot reboot
 )
+:ROOT-SDK27-WAIT-4
+set /p="ROOT-SDK27-WAIT-4" <nul > roottmp.txt
 device_check.exe adb qcom_edl&&ECHO.
 call boot_completed.bat
 busybox sleep 5
+ECHO.%INFO%开始安装一些必备应用,共计11个
+call instapp.bat .\apks\notice.apk
+busybox sleep 1
+call instapp.bat .\apks\wxzf.apk
+busybox sleep 1
+call instapp.bat .\apks\wcp2.apk
+busybox sleep 1
+call instapp.bat .\apks\appstore.apk
+busybox sleep 1
+call instapp.bat .\apks\appstore2.apk
+busybox sleep 1
+call instapp.bat .\apks\appstore3.apk
+busybox sleep 1
+call instapp.bat .\apks\appmanager.apk
+busybox sleep 1
+call instapp.bat .\apks\personalcenter.apk
+busybox sleep 1
+call instapp.bat .\apks\MoyeInstaller.apk
+busybox sleep 1
+call instapp.bat .\apks\weichat.apk
+busybox sleep 1
+call instapp.bat .\apks\appsettings.apk
+busybox sleep 1
+call instapp.bat .\apks\vibrator.apk
+ECHO.%INFO%必备应用安装完成
+:ROOT-SDK27-WAIT-5
+set /p="ROOT-SDK27-WAIT-5" <nul > roottmp.txt
 ECHO.%INFO%使用提示:当手表进入长续航模式、睡眠模式等禁用模式时，可下滑点击手电筒按钮，选择AppManager-仅此一次即可打开第三方应用
 ECHO.%INFO%正在执行提前编译，可能需要一些时间
-adb shell cmd package compile -m everything-profile -f com.xtc.i3launcher
-adb shell cmd package compile -m everything-profile -f com.xtc.setting
+run_cmd "adb shell cmd package compile -m everything-profile -f com.xtc.i3launcher"
+run_cmd "adb shell cmd package compile -m everything-profile -f com.xtc.setting"
 ECHO.%WARN%请永远不要卸载SystemPlus和XTCPatch，否则手表无法开机
 ECHO.%WARN%请永远不要卸载SystemPlus和XTCPatch，否则手表无法开机
 ECHO.%WARN%请永远不要卸载SystemPlus和XTCPatch，否则手表无法开机
 ECHO.%GRAY%-跨越山海 终见曙光-
-ECHO.%INFO%请确保手表为亮屏并已进入桌面状态，然后按任意键继续
-pause
-ECHO.%INFO%请确认当前位于表盘页面
-pause
-run_cmd "adb shell am start -a android.intent.action.VIEW -d file:///sdcard/1.apk -t application/vnd.android.package-archive"
-ECHO.%INFO%请在手表端选择弦-安装器，点击始终，然后按任意键继续
-ECHO.%INFO%提示安装包解析错误是正常的，我们只是在引导您设置默认安装器
-pause
+ECHO.%INFO%提示:如果需要在手表上安装应用，请在手表端选择弦-安装器，点击始终
 ECHO.%INFO%您的手表已ROOT完毕
-ECHO.%INFO%5秒后返回
-busybox sleep 5
-ENDLOCAL
+del /Q /F .\roottmp.txt
+ECHO.%INFO%按任意键返回...
+pause
 exit /b

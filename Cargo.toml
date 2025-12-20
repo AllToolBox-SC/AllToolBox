@@ -1,0 +1,30 @@
+[package]
+name = "alltoolbox"
+version = "1.2.6"
+edition = "2021"
+authors = ["小公爵呀", "星旬Star", "<...其他作者...>"]
+description = "All-in-one xtc toolbox utility"
+license = "Proprietary"
+repository = "https://github.com/AllToolBox-SC/AllToolBox"
+readme = "README.md"
+
+[[bin]]
+name = "jsonutil"
+path = "src/jsonutil.rs"
+
+[[build]]
+target-dir = "build/jsonutil"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+walkdir = "2.5"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
