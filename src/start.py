@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
+
 import os
 import sys
 import shutil
+import time
 from prompt_toolkit import (
     choice, 
     print_formatted_text, 
@@ -19,7 +22,15 @@ style = Style.from_dict({
     "red": "fg:red",
     "orange": "fg:orange",
     "info": "fg:lightblue",
+    "black": "fg:black",
+    "cyan": "fg:cyan",
+    "green": "fg:green",
+    "blue": "fg:blue",
+    "magenta": "fg:magenta",
+    "white": "fg:white",
     "reset": "",
+    "number": "bold",
+    "selected-option": "underline bold",
 })
 
 info = "<info>[信息]</info>"
@@ -32,18 +43,30 @@ key = False
 LINE = "-" * 68
 
 def menu() -> str:
+    global style
+    if os.path.exists("mod") and os.path.isdir("mod"):
+        print_formatted_text(HTML(info + "已加载扩展列表："), style=style) if len(os.listdir("mod")) != 0 else print_formatted_text(HTML(info + "已加载扩展列表：未加载任何扩展"), style=style)
+        if len(os.listdir("mod")) != 0:
+            i: int = 1
+            for item in os.listdir("mod"):
+                print_formatted_text(f"{i}. {item}", style=style)
+                i += 1
+    else:
+        print_formatted_text(HTML(warn + "扩展文件夹没有创建，正在创建..."), style=style)
+        os.remove("mod") if os.path.isfile("mod") else ...
+        os.makedirs("mod", exist_ok=True)
     kb = KeyBindings()
     @kb.add('R')
     def _(event):
         event.app.exit(result="SHIFT_R")
 
     print_formatted_text(ANSI(colorama.Fore.RESET + colorama.Fore.YELLOW + "XTC AllToolBox 控制台&主菜单 " + colorama.Fore.BLUE + "by xgj_236" + colorama.Fore.LIGHTYELLOW_EX))
-    style = Style.from_dict(
-        {
-            "number": "bold",
-            "selected-option": "underline bold",
-        }
-    )
+    # style = Style.from_dict(
+    #     {
+    #         "number": "bold",
+    #         "selected-option": "underline bold",
+    #     }
+    # )
     
     result = choice(
         message="",
@@ -68,9 +91,10 @@ def menu() -> str:
     clear(); return result
 
 def run(cmd):
-    subprocess.run(["cmd.exe", "/c", f"@echo off && call .\\color.bat && {cmd}"], shell=True)
+    subprocess.run(["cmd.exe", "/c", f"@echo off && setlocal enabledelayedexpansion > nul && call .\\color.bat && set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ && set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; && {cmd}"], shell=True)
 
 def appset():
+    global style
     run("cls")
     run("call logo")
     result = choice(
@@ -83,7 +107,7 @@ def appset():
             ("3", "安装xtc状态栏"),
             ("4", "设置微信QQ为开机自启应用"),
             ("5", "解除z10安装限制"),
-        ],
+        ]
     )
     if result == "A":
         clear(); return
@@ -132,6 +156,7 @@ def control():
     control()
 
 def flash():
+    global style
     run("cls")
     run("call logo")
     result = choice(
@@ -148,6 +173,7 @@ def flash():
             ("7", "刷入XTC Patch"),
             ("8", "刷入Magisk模块"),
         ],
+        style=style
     )
     if result == "A":
         clear(); return
@@ -170,6 +196,7 @@ def flash():
     flash()
 
 def xtcservice():
+    global style
     run("cls")
     run("call logo")
     result = choice(
@@ -181,6 +208,7 @@ def xtcservice():
             ("2", "ADB/自检校验码计算"),
             ("3", "离线OTA升级"),
         ],
+        style=style,
     )
     if result == "A":
         clear(); return
@@ -193,6 +221,7 @@ def xtcservice():
     xtcservice()
 
 def debug():
+    global style
     run("cls")
     run("call logo")
     result = choice(
@@ -206,6 +235,7 @@ def debug():
             ("4", "调整为更新状态"),
             ("5", "debug sel"),
         ],
+        style=style,
     )
     if result == "A":
         clear(); return
@@ -230,14 +260,14 @@ def sel():
 
 def color():
     run("cls")
-    print(info + "BLACK")
-    print(info + "RED")
-    print(info + "GREEN")
-    print(info + "ORANGE")
-    print(info + "BLUE")
-    print(info + "MAGENTA")
-    print(info + "CYAN")
-    print(info + "WHITE")
+    print_formatted_text(HTML(info +"<black>BLACK</black>"), style=style)
+    print_formatted_text(HTML(info +"<red>RED</red>"), style=style)
+    print_formatted_text(HTML(info +"<green>GREEN</green>"), style=style)
+    print_formatted_text(HTML(info +"<orange>ORANGE</orange>"), style=style)
+    print_formatted_text(HTML(info +"<blue>BLUE</blue>"), style=style)
+    print_formatted_text(HTML(info +"<magenta>MAGENTA</magenta>"), style=style)
+    print_formatted_text(HTML(info +"<cyan>CYAN</cyan>"), style=style)
+    print_formatted_text(HTML(info +"<white>WHITE</white>"), style=style)
     run("pause")
 
 def help_menu():
@@ -255,25 +285,38 @@ def help_menu():
             ("5", "APK下载"),
             ("6", "工具箱官网"),
             ("7", "开发文档"),
+            ("8", "123云盘解除下载限制")
         ],
     )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        run("call todesk")
-    if result == "2":
-        run("start https://www.123865.com/s/Q5JfTd-hEbWH")
-    if result == "3":
-        run("start https://www.123865.com/s/Q5JfTd-HEbWH")
-    if result == "4":
-        run("start https://www.123684.com/s/Q5JfTd-cEbWH")
-    if result == "5":
-        run("start https://www.123684.com/s/Q5JfTd-ZEbWH")
-    if result == "6":
-        run("start https://atb.xgj.qzz.io")
-    if result == "7":
-        run("type 开发文档.txt")
-        run("pause")
+    match result:
+        case "A":
+            clear()
+            return
+        case "1":
+            run("call todesk")
+        case "2":
+            run("start https://www.123865.com/s/Q5JfTd-hEbWH")
+        case "3":
+            run("start https://www.123865.com/s/Q5JfTd-HEbWH")
+        case "4":
+            run("start https://www.123684.com/s/Q5JfTd-cEbWH")
+        case "5":
+            run("start https://www.123684.com/s/Q5JfTd-ZEbWH")
+        case "6":
+            run("start https://atb.xgj.qzz.io")
+        case "7":
+            with open("开发文档.txt", "r", encoding="utf-8") as f:
+                doc = f.read()
+                print_formatted_text(HTML(doc), style=style)
+            kb = KeyBindings()
+            prompt(
+                HTML(info + "按任意键返回上级菜单"),
+                key_bindings=kb,
+                style=style
+            )
+        case "8":
+            run("call patch123")
+        
     help_menu()
 
 def load_mod_menu():
@@ -287,6 +330,7 @@ def load_mod_menu():
 
     if not dirs:
         print_formatted_text(HTML(warn + "未发现任何扩展"), style=style)
+        time.sleep(2)
         return None
 
     base = 10
@@ -402,6 +446,14 @@ def pre_main() -> bool:
     print_formatted_text(HTML(info + "正在启动中..."), style=style)
     colorama.init(autoreset=True)
     run("call .\\color.bat")
+    if " " in os.path.abspath("."):
+        if os.getenv("ATB_IGNORE_SPACE_IN_PATH", "0") != "1":
+            print_formatted_text(HTML(error + "当前路径包含空格，会导致未知问题，请将工具箱放置在无空格路径下运行，即将退出..."), style=style)
+            print_formatted_text(HTML(info + "若要跳过此检测，请设置环境变量ATB_IGNORE_SPACE_IN_PATH=1"), style=style)
+            time.sleep(2)
+            return False
+        else:
+            print_formatted_text(HTML(warn + "当前路径包含空格，可能导致未知问题，建议将工具箱放置在无空格路径下运行"), style=style)
     print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
     run("set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\")
     print_formatted_text(HTML(info + "检查系统变量[PATHEXT]..."), style=style)
@@ -411,17 +463,20 @@ def pre_main() -> bool:
     for item in os.listdir("mod"):
         item_path = os.path.join("mod", item)
         if os.path.isdir(item_path):
-            if os.path.exists(os.path.join(item_path, "autoexec.bat")):
-                run(f'cd /d mod\\{item} && call autoexec.bat')
+            if os.path.exists(os.path.join(item_path, "start.bat")):
+                run(f'cd /d mod\\{item} && call start.bat')
 
     os.chdir("..\\bin")
     wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
     if wmic.returncode != 0:
         r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
-        if r.lower() != "y":
+        if r.lower() == "y":
             print_formatted_text(HTML(info + "正在安装WMIC..."), style=style)
             run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
+            run("call refreshenv")
+        else:
+            print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
     run("call withone")
     run("call afterup")
     print_formatted_text(HTML(info + "正在检查更新..."), style=style)
@@ -469,6 +524,7 @@ def pre_main() -> bool:
 def main() -> int:
     global flag
     global key
+    global style
     try:
         clear()
         pre = pre_main() if not flag else True
@@ -506,6 +562,7 @@ def main() -> int:
             return main()
 
 def cleanup(code: int):
+    global style
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
     subprocess.run(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
     sys.exit(code)

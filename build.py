@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 import sys
 import subprocess
@@ -16,7 +18,7 @@ def download_dependency():
         with open("binary_link.txt", "r") as f:
             url = f.read().strip()
     else:
-        url_response = requests.get("https://atb.xgj.qzz.io/binary_link.txt")
+        url_response = requests.get("https://atb.xgj.qzz.io/other/binary_link.txt")
         url = url_response.text.strip()
     print(f"Downloading bin.7z from {url} ...")
     response = requests.get(url, stream=True)
