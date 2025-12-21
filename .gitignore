@@ -13,4 +13,8 @@ target/
 *.bak
 *.pyc
 *.lock
+*.spec
 __pycache__/
+/start.spec
+/run_cmd.spec
+/main.spec
