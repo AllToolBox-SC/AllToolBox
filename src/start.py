@@ -398,7 +398,7 @@ def about():
         style=style
     )
 
-    subprocess.run(["cmd.exe", "/c",  "call", "thank.bat"], shell=True)
+    run("call thank.bat")
 
     print_formatted_text(
         HTML(info + "工具官网：https://atb.xgj.qzz.io"),
@@ -421,7 +421,7 @@ def about():
         style=style
     )
 
-    subprocess.run(["cmd.exe", "/c",  "call", "uplog.bat"], shell=True)
+    run("call uplog.bat")
 
     print_formatted_text(
         HTML(f"<yellow>{LINE}</yellow>"),
