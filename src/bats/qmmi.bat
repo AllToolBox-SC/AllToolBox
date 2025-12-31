@@ -1,3 +1,5 @@
+if "%1"=="" goto rebootP-qmmi
+goto %1
 :rebootP-qmmi
 CLS
 call logo
@@ -16,6 +18,7 @@ ECHO.10.Z7S
 ECHO.11.Z8(或少年版)
 ECHO.12.Z8A
 ECHO.13.Z9(或少年版)
+ECHO.14.Z10(或少年版)
 ECHO.════════════════════════════════
 set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
 if "%MENU%"=="1" set innermodel=I12&&goto otherpash
@@ -31,6 +34,7 @@ if "%MENU%"=="10" set innermodel=I25D&&goto v3pash
 if "%MENU%"=="11" set innermodel=I32&&goto v3pash
 if "%MENU%"=="12" set innermodel=ND07&&goto v3pash
 if "%MENU%"=="13" set innermodel=ND01&&goto v3pash
+if "%MENU%"=="14" set innermodel=ND03&&goto z10
 ECHO %ERROR%输入错误，请重新输入！%RESET%
 timeout /t 2 >nul
 goto rebootP-qmmi
@@ -45,11 +49,11 @@ copy /Y .\EDL\misc\misc.img .\EDL\rooting\misc.img
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
 ECHO %INFO%如果长时间卡死在这里，可能是已经引导了，请尝试用qfil手刷
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn >nul
 ECHO %INFO%开始刷入misc%RESET%
-fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
 ECHO %INFO%执行重启%RESET%
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%已进入QMMI%RESET%
@@ -66,11 +70,30 @@ ECHO %INFO%解压所需文件%RESET%
 copy /Y .\EDL\misc\misc.mbn .\EDL\rooting\misc.mbn
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn >nul
 ECHO %INFO%开始刷入misc%RESET%
-fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
 ECHO %INFO%执行重启%RESET%
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+ECHO %INFO%清理临时数据%RESET%
+del /Q /F ".\EDL\rooting\*.*"
+ECHO %INFO%已进入QMMI%RESET%
+exit /b
+
+:z10
+ECHO %INFO%请接入需要刷写的9008设备%RESET%
+adb reboot edl 2>nul 1>nul
+device_check.exe qcom_edl&&ECHO.
+ECHO %INFO%拷贝文件到临时目录%RESET%
+copy /Y .\EDL\misc\misc_ND03.xml .\EDL\rooting\misc.xml
+copy /Y .\EDL\misc\misc.img .\EDL\rooting\misc.img
+ECHO %INFO%获取9008端口并执行引导%RESET%
+call edlport
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\prog_firehose_ddr.elf
+ECHO %INFO%开始刷入misc%RESET%
+fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
+ECHO %INFO%执行重启%RESET%
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%已进入QMMI%RESET%

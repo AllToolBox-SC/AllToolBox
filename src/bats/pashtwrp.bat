@@ -54,13 +54,13 @@ ECHO %INFO%解压所需文件%RESET%
 7z x EDL\rooting\root.zip -o.\EDL\rooting\ -aoa >nul 2>&1
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn
 ECHO %INFO%开始刷入recovery%RESET%
 call edlport
-fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt
+fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt
 ECHO %INFO%执行重启%RESET%
 call edlport
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%刷入完成，按任意键返回%RESET%
@@ -77,13 +77,13 @@ ECHO %INFO%解压所需文件%RESET%
 7z x EDL\rooting\root.zip -o.\EDL\rooting\ -aoa >nul 2>&1
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn
 ECHO %INFO%开始刷入aboat,recovery%RESET%
 call edlport
-fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\rawprogram0.xml --noprompt
+fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\rawprogram0.xml --noprompt
 ECHO %INFO%执行重启%RESET%
 call edlport
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%刷入完成，按任意键返回%RESET%

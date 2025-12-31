@@ -5,7 +5,7 @@ set result=%errorlevel%
 if %result% equ 1 (
     goto openinst
 ) else (
-    goto qmmi
+    call qmmi z10
 )
 exit /b
 
@@ -27,23 +27,4 @@ adb shell setprop ctl.restart zygote
 ECHO %INFO%安装必备应用:抬腕文件[喜马拉雅少儿框架]，第三方应用启动器[海洋世界框架]%RESET%
 adb install -r -t -d .\apks\z10apk.Apk
 adb install -r -t -d .\apks\z10apk1.Apk
-exit /b
-
-:qmmi
-ECHO %INFO%请接入需要刷写的9008设备%RESET%
-adb reboot edl 2>nul 1>nul
-device_check.exe qcom_edl&&ECHO.
-ECHO %INFO%拷贝文件到临时目录%RESET%
-copy /Y .\EDL\misc\misc_ND03.xml .\EDL\rooting\misc.xml
-copy /Y .\EDL\misc\misc.img .\EDL\rooting\misc.img
-ECHO %INFO%获取9008端口并执行引导%RESET%
-call edlport
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\prog_firehose_ddr.elf
-ECHO %INFO%开始刷入misc%RESET%
-call edlport
-fh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
-ECHO %INFO%清理临时数据%RESET%
-del /Q /F ".\EDL\rooting\*.*"
-ECHO %INFO%刷入完成，按任意键返回%RESET%
-pause >nul
 exit /b

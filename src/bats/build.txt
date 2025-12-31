@@ -81,3 +81,6 @@ ro.vendor.at_library=AT¿â
 ro.vendor.gt_library=GT¿â
 vendor.display.enable_default_color_mode=Ä¬ÈÏÑÕÉ«Ä£Ê½
 vendor.vidc.enc.narrow.searchrange=Õ­ËÑË÷·¶Î§±àÂë
+ro.boot.xtc.chipid=chipid
+ro.boot.bindnumber=°ó¶¨ºÅ
+persist.sys.watch.id=Watch ID

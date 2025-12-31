@@ -1,3 +1,4 @@
+ENDLOCAL
 :roottmp
 CLS
 if exist .\roottmp.txt (
@@ -6,9 +7,9 @@ if exist .\roottmp.txt (
     echo.%YELLOW%你上一次的一键root可能没有完成，需要从断开位置继续吗?
     set /p rootyesno=%YELLOW%输入yes继续输入no将删除未完成记录：%RESET%
     set /p roottmp=<roottmp.txt
-    if "!rootyesno!"=="yes" device_check.exe adb qcom_edl fastboot & ECHO. & goto !roottmp!
+    if "!rootyesno!"=="yes" device_check.exe adb qcom_edl fastboot & ECHO. & ENDLOCAL & SETLOCAL disabledelayedexpansion & goto !roottmp!
     if "!rootyesno!"=="no" del /Q /F .\roottmp.txt
-    if "!rootyesno!"=="y" device_check.exe adb qcom_edl fastboot & ECHO. & goto !roottmp!
+    if "!rootyesno!"=="y" device_check.exe adb qcom_edl fastboot & ECHO. & ENDLOCAL & SETLOCAL disabledelayedexpansion & goto !roottmp!
     if "!rootyesno!"=="n" del /Q /F .\roottmp.txt
     goto roottmp
 )
@@ -18,6 +19,7 @@ set nouserdata=1
 ECHO.%INFO%你选择了不刷userdata，这可能导致设备出现问题
 pause
 :ROOT
+ENDLOCAL
 SETLOCAL disabledelayedexpansion
 CLS
 echo %YELLOW%════════════════════════%RESET%
@@ -104,6 +106,7 @@ busybox sleep 2
 for /f "delims=" %%i in ('type tmp.txt') do set devicestatus=%%i
 if "%devicestatus%"=="qcom_edl" (
 call qmmi
+device_check.exe adb&&ECHO.
 )
 
 for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.innermodel') do set innermodel=%%i
@@ -227,10 +230,10 @@ adb reboot edl
 set /p="ROOT-SDK25-1-1" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
-QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn
 busybox sleep 2
 ECHO.%INFO%读取boot
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt
 move /Y .\boot.img .\tmp\boot.img
 if %errorlevel% neq 0 (
    echo %ERROR%移动boot.img文件失败
@@ -241,7 +244,7 @@ if %errorlevel% neq 0 (
 :ROOT-SDK25-1-2
 set /p="ROOT-SDK25-1-2" <nul > roottmp.txt
 ECHO.%INFO%开始修补boot
-call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt >nul
+call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt
 ECHO.%INFO%解包boot
 magiskboot unpack -h boot.img 1>nul 2>nul
 ECHO.%INFO%替换adbd
@@ -256,10 +259,10 @@ del /Q /F .\tmp\boot.img
 :ROOT-SDK25-1-3
 set /p="ROOT-SDK25-1-3" <nul > roottmp.txt
 ECHO.%INFO%刷入BOOT
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\boot.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\boot.xml --noprompt
 ECHO.%INFO%boot刷入完毕
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
 goto ROOT-SDK25-wait
 
@@ -270,10 +273,10 @@ adb reboot edl
 set /p="ROOT-SDK25-2-1" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
-QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn
 busybox sleep 2
 ECHO.%INFO%读取boot
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt
 move /Y .\boot.img .\tmp\boot.img
 if %errorlevel% neq 0 (
    echo %ERROR%移动boot.img文件失败
@@ -284,7 +287,7 @@ if %errorlevel% neq 0 (
 :ROOT-SDK25-2-2
 set /p="ROOT-SDK25-2-2" <nul > roottmp.txt
 ECHO.%INFO%开始修补boot
-call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt >nul
+call magiskpatch %cd%\tmp\boot.img %cd%\boot.img 20400.zip noprompt
 ECHO.%INFO%解包boot
 magiskboot unpack -h boot.img 1>nul 2>nul
 ECHO.%INFO%替换adbd
@@ -299,11 +302,11 @@ del /Q /F .\tmp\boot.img
 :ROOT-SDK25-2-3
 set /p="ROOT-SDK25-2-3" <nul > roottmp.txt
 ECHO.%INFO%刷入BOOT至Recovery分区
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt
 ECHO.%INFO%刷入misc
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%坐和放宽，让我们等待您的手表一段时间
 
 :ROOT-SDK25-wait
@@ -339,15 +342,19 @@ adb wait-for-device reboot edl
 set /p="ROOT-SDK25-wait-2" <nul > roottmp.txt
 call edlport
 ECHO.%INFO%发送引导
-QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8909w.mbn
 ECHO.%INFO%刷入BOOT至Recovery分区
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt
 ECHO.%INFO%刷入misc
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 :ROOT-SDK25-F
 set /p="ROOT-SDK25-F" <nul > roottmp.txt
+device_check.exe adb qcom_edl&&ECHO.
+call boot_completed.bat
+ECHO.%INFO%重启手表
+adb reboot
 device_check.exe adb qcom_edl&&ECHO.
 call boot_completed.bat
 adb shell magisk -v | find "MAGISK" 1>nul 2>nul || ECHO %ERROR%ROOT失败！发生错误，错误root-sdk25-F，请尝试换方案再次root&&ECHO.%INFO%按任意键返回&&pause&&exit /b
@@ -358,6 +365,9 @@ pause
 exit /b
 
 :ROOT-SDK27
+set /p DCIMyn=%YELLOW%要备份相册吗？[y/n]:%RESET% 
+if "%DCIMyn%"=="y" call backup DCIM backup noask&&set /p="%backupname%" <nul > backupname.txt
+if "%DCIMyn%"=="yes" call backup DCIM backup noask&&set /p="%backupname%" <nul > backupname.txt
 ECHO.%INFO%重启您的手表至9008
 adb reboot edl
 call edlport
@@ -365,10 +375,10 @@ call edlport
 :ROOT-SDK27-Patch
 set /p="ROOT-SDK27-Patch" <nul > roottmp.txt
 ECHO.%INFO%发送引导
-QSaharaServer.exe -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8937.mbn >nul
+QSaharaServer.bat -p \\.\COM%chkdev__edl_port% -s 13:%cd%\EDL\msm8937.mbn
 busybox sleep 2
 ECHO.%INFO%读取boot
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --sendxml=%cd%\EDL\rooting\boot.xml --convertprogram2read --noprompt
 move /Y .\boot.img .\tmp\boot.img 1>nul 2>nul
 if %errorlevel% neq 0 (
    echo %ERROR%移动boot.img文件失败
@@ -399,18 +409,18 @@ if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%刷入recovery
 copy EDL\rooting\sboot.img EDL\rooting\recovery.img > nul
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\recovery.xml --noprompt
 ECHO.%INFO%刷入boot，aboot，userdata，misc
 ) else (
 ECHO.%INFO%刷入recovery，aboot
 )
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\rawprogram0.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\rawprogram0.xml --noprompt
 :ROOT-SDK27-Patch-3
 set /p="ROOT-SDK27-Patch-3" <nul > roottmp.txt
 if exist .\nouserdata.txt set /p nouserdata=<nouserdata.txt >nul
 if "%nouserdata%"=="1" (
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%你选择了不刷userdata，不再继续
 ECHO.按任意键返回...
 pause >nul
@@ -419,14 +429,14 @@ exit /b
 if exist .\smodel.txt set /p smodel=<smodel.txt >nul
 if "%smodel%"=="1" (
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 goto ROOT-SDK27-WAIT
 )
 ECHO.%INFO%擦除boot
 copy /Y tmp\eboot.img tmp\boot.img > nul
-fh_loader.exe --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=tmp --sendxml=EDL\rooting\boot.xml --noprompt >nul
+fh_loader.bat --port=\\.\COM%chkdev__edl_port% --memoryname=EMMC --search_path=tmp --sendxml=EDL\rooting\boot.xml --noprompt
 ECHO.%INFO%重启手表
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO.%INFO%等待开机
 :ROOT-SDK27-Patch-4
 set /p="ROOT-SDK27-Patch-4" <nul > roottmp.txt
@@ -584,7 +594,7 @@ run_cmd "adb shell ""rm -rf /sdcard/xtcpatch.zip"""
 ECHO.%INFO%安装XTC Patch模块成功
 run_cmd "adb shell wm density reset"
 run_cmd "adb shell pm clear com.android.packageinstaller"
-adb shell pm list packages | findstr "com.android.systemui" > nul
+adb shell pm path com.android.systemui > nul 2> nul
 if %errorlevel%==0 (
     set havesystemui=1
     set /p="1" <nul > havesystemui.txt
@@ -652,7 +662,7 @@ run_cmd "adb reboot"
     run_cmd "fastboot erase misc"
     run_cmd "fastboot reboot"
 )
-SETLOCAL disabledelayedexpansion
+ENDLOCAL
 :ROOT-SDK27-WAIT-4
 set /p="ROOT-SDK27-WAIT-4" <nul > roottmp.txt
 device_check.exe adb qcom_edl&&ECHO.
@@ -686,56 +696,13 @@ ECHO.%WARN%请永远不要卸载SystemPlus和XTCPatch，否则手表无法开机
 ECHO.%GRAY%-跨越山海 终见曙光-
 ECHO.%INFO%提示:如果需要在手表上安装应用，请在手表端选择弦-安装器，点击始终
 ECHO.%INFO%您的手表已ROOT完毕
+set /p backupname=<backupnametxt
+set /p DCIMyn=%YELLOW%要恢复相册吗？[y/n]:%RESET% 
+if "%DCIMyn%"=="y" call backup DCIM recover noask
+if "%DCIMyn%"=="yes" call backup DCIM recover noask
 ECHO.%YELLOW%是否进行预装优化[包括模块和应用，期间需要多次选择]？
 set /p rootpro=%YELLOW%输入y进行优化，按任意键直接退出%RESET% 
-if /i "%rootpro%"=="y" goto rootpro
-del /Q /F .\roottmp.txt
-ECHO.%INFO%按任意键返回...
-pause
-exit /b
-
-:rootpro
-set /p="rootpro" <nul > roottmp.txt
-device_check.exe adb&&ECHO.
-call boot_completed.bat
-ECHO.%INFO%开始执行优化...
-ECHO.%INFO%开始安装应用,共计6个
-call instapp.bat .\rootproapks\LocalSend.apk
-call instapp.bat .\rootproapks\Via.apk
-call instapp.bat .\rootproapks\Xposed_Edge_Pro.apk
-call instapp.bat .\rootproapks\MTfile.apk
-call instapp.bat .\rootproapks\xtcinputpro.apk
-call instapp.bat .\rootproapks\sogouwearpro.apk
-ECHO.%INFO%安装完成
-ECHO.%INFO%你是否需要安装禁用模式切换的桌面？
-set /p i13yesorno=%YELLOW%输入y进行安装，按任意键跳过%RESET% 
-if not "%i13yesorno%"=="y" goto rootpro-noi13
-if exist .\havesystemui.txt set /p havesystemui=<havesystemui.txt >nul
-if exist .\isv3.txt set /p isv3=<isv3.txt >nul
-if "%isv3%"=="1" (
-    if "%havesystemui%"=="1" (
-        call instapp.bat .\rootproapks\130510_D.apk
-    ) else (
-        call instapp.bat .\rootproapks\121750_D.apk
-    )
-) else (
-    call instapp.bat .\rootproapks\116100_D.apk
-)
-:rootpro-noi13
-for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.innermodel') do set innermodel=%%i
-ECHO.%INFO%您的设备innermodel为:%innermodel%
-for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.build.version.release') do set androidversion=%%i
-ECHO.%INFO%您的设备安卓版本为:%androidversion%
-echo %INFO%开始刷入模块,共计3个%RESET%
-
-if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\WearOS_Ablev.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\WearOS_Ablev.zip) else (call instmodule.bat .\magiskmod\WearOS_Ablev.zip)
-
-if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\Recorder.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\Recorder.zip) else (call instmodule.bat .\magiskmod\Recorder.zip)
-
-if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\documentsui.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\documentsui.zip) else (call instmodule.bat .\magiskmod\documentsui.zip)
-
-echo %INFO%刷入模块完成%RESET%
-echo %INFO%已优化完成%RESET%
+if /i "%rootpro%"=="y" call rootpro
 del /Q /F .\roottmp.txt
 ECHO.%INFO%按任意键返回...
 pause

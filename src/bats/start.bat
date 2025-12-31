@@ -5,7 +5,7 @@ cd /d bin 2>nul 1>nul
 ECHO.
 ECHO [信息]正在启动中...
 ECHO [信息]检查系统变量[PATH]...
-set PATH=%PATH%;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH;%cd%
+set PATH=%cd%;%PATH%;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Windows\System32\OpenSSH
 ECHO [信息]检查系统变量[PATHEXT]...
 set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
 title XTC AllToolBox by xgj_236
@@ -45,6 +45,7 @@ pause >nul
 goto menu
 
 :menu
+ENDLOCAL
 setlocal enabledelayedexpansion
 del /Q /F .\dir.tmp 1>nul 2>nul
 CLS
@@ -164,10 +165,11 @@ call logo
 ECHO %ORANGE%刷机与文件菜单%YELLOW%
 ECHO ╔═════════════════════════════════════════════════════════════════════╗
 ECHO ║A.返回上级菜单                                                       ║
-ECHO ║1.从云端更新文件                     5.每次开机自刷入Recovery[不推荐]║
-ECHO ║2.导入本地root文件                   6.刷入TWRP-recovery             ║
-ECHO ║3.一键root[不刷userdata]             7.刷入XTC Patch                 ║
-ECHO ║4.恢复出厂设置[不是超级恢复]         8.刷入Magisk模块                ║
+ECHO ║1.从云端更新文件                     6.刷入TWRP-recovery             ║
+ECHO ║2.导入本地root文件                   7.刷入XTC Patch                 ║
+ECHO ║3.一键root[不刷userdata]             8.刷入Magisk模块                ║
+ECHO ║4.恢复出厂设置[不是超级恢复]         9.备份与恢复            ║
+ECHO ║5.每次开机自刷入Recovery[不推荐]                                     ║
 ECHO ╚═════════════════════════════════════════════════════════════════════╝
 ECHO.%RESET%
 set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
