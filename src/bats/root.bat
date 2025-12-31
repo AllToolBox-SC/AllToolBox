@@ -4,12 +4,12 @@ if exist .\roottmp.txt (
     echo.%WARN%¡°¶ÏµãĞøË¢¡±ÊÇÒ»¸ö²âÊÔĞÔ¹¦ÄÜ
     echo.%WARN%¿ÉÄÜ»á³öÏÖÎ´ÖªÎÊÌâ£¬Èç¹û³öÏÖÎÊÌâ£¬Çë³¬¼¶»Ö¸´
     echo.%YELLOW%ÄãÉÏÒ»´ÎµÄÒ»¼üroot¿ÉÄÜÃ»ÓĞÍê³É£¬ĞèÒª´Ó¶Ï¿ªÎ»ÖÃ¼ÌĞøÂğ?
-    set /p yesno=%YELLOW%ÊäÈëyes¼ÌĞøÊäÈëno½«É¾³ıÎ´Íê³É¼ÇÂ¼£º%RESET%
+    set /p rootyesno=%YELLOW%ÊäÈëyes¼ÌĞøÊäÈëno½«É¾³ıÎ´Íê³É¼ÇÂ¼£º%RESET%
     set /p roottmp=<roottmp.txt
-    if "!yesno!"=="yes" goto %roottmp%
-    if "!yesno!"=="no" del /Q /F .\roottmp.txt
-    if "!yesno!"=="y" goto %roottmp%
-    if "!yesno!"=="n" del /Q /F .\roottmp.txt
+    if "!rootyesno!"=="yes" device_check.exe adb qcom_edl fastboot & ECHO. & goto !roottmp!
+    if "!rootyesno!"=="no" del /Q /F .\roottmp.txt
+    if "!rootyesno!"=="y" device_check.exe adb qcom_edl fastboot & ECHO. & goto !roottmp!
+    if "!rootyesno!"=="n" del /Q /F .\roottmp.txt
     goto roottmp
 )
 if "%1"=="" goto ROOT
@@ -100,7 +100,7 @@ echo %YELLOW%¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨
 ECHO.%WARN%Èç¹ûÌáÊ¾Î´ÊÚÈ¨¡¢ÀëÏßµÈÇëÖØĞÂÁ¬½Ó
 echo %YELLOW%¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T%RESET%
 device_check.exe adb qcom_edl&&ECHO.
-timeout /t 2 /nobreak >nul
+busybox sleep 2
 for /f "delims=" %%i in ('type tmp.txt') do set devicestatus=%%i
 if "%devicestatus%"=="qcom_edl" (
 call qmmi
@@ -124,16 +124,6 @@ for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.current.s
 echo %INFO%°æ±¾ºÅ:%version%
 call isv3
 set /p="%isv3%" <nul > isv3.txt
-adb shell pm list packages | findstr "com.android.systemui" > nul
-if %errorlevel%==0 (
-    set havesystemui=1
-    set /p="1" <nul > havesystemui.txt
-    ECHO %GREEN%ÏµÍ³´æÔÚSystemUI
-) else (
-    set havesystemui=0
-    set /p="0" <nul > havesystemui.txt
-    ECHO %GREEN%ÏµÍ³²»´æÔÚSystemUI
-)
 del /Q /F tmp.txt >nul 2>nul
 del /Q /F .\*.img >nul 2>nul
 del /Q /F .\tmp\boot.img >nul 2>nul
@@ -153,6 +143,9 @@ if %errorlevel% neq 0 (
    ECHO %WARN%Î´ÏÂÔØ¹ırootÎÄ¼ş£¬Õı³£Ã»ÓĞÓ°Ïì
 )
 copy /Y "%cd%\EDL\%innermodel%.zip" "%cd%\EDL\rooting\root.zip"
+if %errorlevel% neq 0 (
+   ECHO %WARN%ÕÒ²»µ½ÎÄ¼ş£¬¿ÉÄÜÊÇ²»Ö§³ÖµÄĞÍºÅ
+)
 ECHO %INFO%¿ªÊ¼½âÑ¹ÎÄ¼ş
 7z x EDL\rooting\root.zip -o.\EDL\rooting -aoa >nul 2>&1
 if %errorlevel% neq 0 (
@@ -519,8 +512,10 @@ ECHO.%INFO%ÕıÔÚ×Ô¶¯´ò¿ªEdxposed Installer£¬ÇëÉÔºó
 device_check.exe adb qcom_edl&&ECHO.
 run_cmd "adb shell am start -n com.solohsu.android.edxp.manager/de.robv.android.xposed.installer.WelcomeActivity"
 busybox sleep 7
-run_cmd "adb shell am start -n com.huanli233.systemplus/.ActiveSelfActivity"
 ECHO.%INFO%ÕıÔÚ×Ô¶¯¼¤»î£¬ÇëÉÔºó
+busybox.exe sleep 10
+run_cmd "adb shell input keyevent 4"
+run_cmd "adb shell am start -n com.huanli233.systemplus/.ActiveSelfActivity"
 device_check.exe adb&&ECHO.
 adb shell input swipe 160 300 160 60 100
 adb shell input swipe 160 300 160 60 100
@@ -589,6 +584,16 @@ run_cmd "adb shell ""rm -rf /sdcard/xtcpatch.zip"""
 ECHO.%INFO%°²×°XTC PatchÄ£¿é³É¹¦
 run_cmd "adb shell wm density reset"
 run_cmd "adb shell pm clear com.android.packageinstaller"
+adb shell pm list packages | findstr "com.android.systemui" > nul
+if %errorlevel%==0 (
+    set havesystemui=1
+    set /p="1" <nul > havesystemui.txt
+    ECHO %GREEN%ÏµÍ³´æÔÚSystemUI
+) else (
+    set havesystemui=0
+    set /p="0" <nul > havesystemui.txt
+    ECHO %GREEN%ÏµÍ³²»´æÔÚSystemUI
+)
 if "%havesystemui%"=="1" (
   ECHO.%INFO%¿ªÊ¼°²×°XTC Patch_SystemUIÄ£¿é
   adb push tmp\systemui.zip /sdcard/systemui.zip
@@ -614,11 +619,11 @@ call boot_completed.bat
 busybox sleep 5
 )
 busybox sleep 10
-ECHO.%INFO%¿ªÊ¼°²×°Ò»Ğ©ÏµÍ³Ó¦ÓÃ
-call instapp.bat .\apks\selftest.apk
-busybox sleep 1
+ECHO.%INFO%ÉÔµÈÆ¬¿Ì...
+adb reboot
+call boot_completed.bat
+ECHO.%INFO%¿ªÊ¼°²×°ÏµÍ³Ó¦ÓÃ
 call instapp.bat .\apks\settings.apk
-busybox sleep 1
 if exist .\havesystemui.txt set /p havesystemui=<havesystemui.txt >nul
 if exist .\isv3.txt set /p isv3=<isv3.txt >nul
 if "%isv3%"=="1" (
@@ -632,45 +637,43 @@ if "%isv3%"=="1" (
 )
 ECHO.%INFO%ÏµÍ³Ó¦ÓÃ°²×°Íê³É
 if exist .\smodel.txt set /p smodel=<smodel.txt >nul
+setlocal enabledelayedexpansion
 if "%smodel%"=="1" (
 ECHO.%INFO%ÖØÆôÊÖ±í
 run_cmd "adb reboot"
 ) else (
-ECHO.%INFO%²Á³ımisc²¢ÖØÆô
-run_cmd "adb reboot bootloader"
-fastboot erase misc
-fastboot reboot
+    ECHO.%INFO%²Á³ımisc²¢ÖØÆô
+    run_cmd "adb reboot bootloader"
+    device_check.exe adb fastboot&&ECHO.
+    for /f "delims=" %%i in ('type tmp.txt') do set devicestatus=%%i
+    if "!devicestatus!"=="adb" (
+        run_cmd "adb reboot bootloader"
+    )
+    run_cmd "fastboot erase misc"
+    run_cmd "fastboot reboot"
 )
+SETLOCAL disabledelayedexpansion
 :ROOT-SDK27-WAIT-4
 set /p="ROOT-SDK27-WAIT-4" <nul > roottmp.txt
 device_check.exe adb qcom_edl&&ECHO.
 call boot_completed.bat
 busybox sleep 5
-ECHO.%INFO%¿ªÊ¼°²×°Ò»Ğ©±Ø±¸Ó¦ÓÃ,¹²¼Æ11¸ö
+ECHO.%INFO%¿ªÊ¼°²×°Ô¤×°Ó¦ÓÃ,¹²¼Æ14¸ö
+call instapp.bat .\apks\selftest.apk
+call instapp.bat .\apks\settings.apk
 call instapp.bat .\apks\notice.apk
-busybox sleep 1
 call instapp.bat .\apks\wxzf.apk
-busybox sleep 1
 call instapp.bat .\apks\wcp2.apk
-busybox sleep 1
 call instapp.bat .\apks\appstore.apk
-busybox sleep 1
 call instapp.bat .\apks\appstore2.apk
-busybox sleep 1
 call instapp.bat .\apks\appstore3.apk
-busybox sleep 1
 call instapp.bat .\apks\appmanager.apk
-busybox sleep 1
 call instapp.bat .\apks\personalcenter.apk
-busybox sleep 1
 call instapp.bat .\apks\MoyeInstaller.apk
-busybox sleep 1
 call instapp.bat .\apks\weichat.apk
-busybox sleep 1
 call instapp.bat .\apks\appsettings.apk
-busybox sleep 1
 call instapp.bat .\apks\vibrator.apk
-ECHO.%INFO%±Ø±¸Ó¦ÓÃ°²×°Íê³É
+ECHO.%INFO%Ô¤×°Ó¦ÓÃ°²×°Íê³É
 :ROOT-SDK27-WAIT-5
 set /p="ROOT-SDK27-WAIT-5" <nul > roottmp.txt
 ECHO.%INFO%Ê¹ÓÃÌáÊ¾:µ±ÊÖ±í½øÈë³¤Ğøº½Ä£Ê½¡¢Ë¯ÃßÄ£Ê½µÈ½ûÓÃÄ£Ê½Ê±£¬¿ÉÏÂ»¬µã»÷ÊÖµçÍ²°´Å¥£¬Ñ¡ÔñAppManager-½ö´ËÒ»´Î¼´¿É´ò¿ªµÚÈı·½Ó¦ÓÃ
@@ -683,6 +686,56 @@ ECHO.%WARN%ÇëÓÀÔ¶²»ÒªĞ¶ÔØSystemPlusºÍXTCPatch£¬·ñÔòÊÖ±íÎŞ·¨¿ª»ú
 ECHO.%GRAY%-¿çÔ½É½º£ ÖÕ¼ûÊï¹â-
 ECHO.%INFO%ÌáÊ¾:Èç¹ûĞèÒªÔÚÊÖ±íÉÏ°²×°Ó¦ÓÃ£¬ÇëÔÚÊÖ±í¶ËÑ¡ÔñÏÒ-°²×°Æ÷£¬µã»÷Ê¼ÖÕ
 ECHO.%INFO%ÄúµÄÊÖ±íÒÑROOTÍê±Ï
+ECHO.%YELLOW%ÊÇ·ñ½øĞĞÔ¤×°ÓÅ»¯[°üÀ¨Ä£¿éºÍÓ¦ÓÃ£¬ÆÚ¼äĞèÒª¶à´ÎÑ¡Ôñ]£¿
+set /p rootpro=%YELLOW%ÊäÈëy½øĞĞÓÅ»¯£¬°´ÈÎÒâ¼üÖ±½ÓÍË³ö%RESET% 
+if /i "%rootpro%"=="y" goto rootpro
+del /Q /F .\roottmp.txt
+ECHO.%INFO%°´ÈÎÒâ¼ü·µ»Ø...
+pause
+exit /b
+
+:rootpro
+set /p="rootpro" <nul > roottmp.txt
+device_check.exe adb&&ECHO.
+call boot_completed.bat
+ECHO.%INFO%¿ªÊ¼Ö´ĞĞÓÅ»¯...
+ECHO.%INFO%¿ªÊ¼°²×°Ó¦ÓÃ,¹²¼Æ6¸ö
+call instapp.bat .\rootproapks\LocalSend.apk
+call instapp.bat .\rootproapks\Via.apk
+call instapp.bat .\rootproapks\Xposed_Edge_Pro.apk
+call instapp.bat .\rootproapks\MTfile.apk
+call instapp.bat .\rootproapks\xtcinputpro.apk
+call instapp.bat .\rootproapks\sogouwearpro.apk
+ECHO.%INFO%°²×°Íê³É
+ECHO.%INFO%ÄãÊÇ·ñĞèÒª°²×°½ûÓÃÄ£Ê½ÇĞ»»µÄ×ÀÃæ£¿
+set /p i13yesorno=%YELLOW%ÊäÈëy½øĞĞ°²×°£¬°´ÈÎÒâ¼üÌø¹ı%RESET% 
+if not "%i13yesorno%"=="y" goto rootpro-noi13
+if exist .\havesystemui.txt set /p havesystemui=<havesystemui.txt >nul
+if exist .\isv3.txt set /p isv3=<isv3.txt >nul
+if "%isv3%"=="1" (
+    if "%havesystemui%"=="1" (
+        call instapp.bat .\rootproapks\130510_D.apk
+    ) else (
+        call instapp.bat .\rootproapks\121750_D.apk
+    )
+) else (
+    call instapp.bat .\rootproapks\116100_D.apk
+)
+:rootpro-noi13
+for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.product.innermodel') do set innermodel=%%i
+ECHO.%INFO%ÄúµÄÉè±¸innermodelÎª:%innermodel%
+for /f "delims=" %%i in ('adb wait-for-device shell getprop ro.build.version.release') do set androidversion=%%i
+ECHO.%INFO%ÄúµÄÉè±¸°²×¿°æ±¾Îª:%androidversion%
+echo %INFO%¿ªÊ¼Ë¢ÈëÄ£¿é,¹²¼Æ3¸ö%RESET%
+
+if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\WearOS_Ablev.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\WearOS_Ablev.zip) else (call instmodule.bat .\magiskmod\WearOS_Ablev.zip)
+
+if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\Recorder.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\Recorder.zip) else (call instmodule.bat .\magiskmod\Recorder.zip)
+
+if "%androidversion%"=="7.1.1" (call instmodule2.bat .\magiskmod\documentsui.zip) else if "%androidversion%"=="4.4.4" (call instmodule2.bat .\magiskmod\documentsui.zip) else (call instmodule.bat .\magiskmod\documentsui.zip)
+
+echo %INFO%Ë¢ÈëÄ£¿éÍê³É%RESET%
+echo %INFO%ÒÑÓÅ»¯Íê³É%RESET%
 del /Q /F .\roottmp.txt
 ECHO.%INFO%°´ÈÎÒâ¼ü·µ»Ø...
 pause

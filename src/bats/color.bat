@@ -1,5 +1,4 @@
 :: ÑÕÉ«¶¨Òå
-@echo off
 for /f %%a in ('echo prompt $E^| cmd') do set "ESC=%%a"
 
 set "BLACK=%ESC%[30m"

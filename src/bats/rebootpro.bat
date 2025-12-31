@@ -5,7 +5,7 @@ call logo.bat
 ECHO %ORANGE%高级重启%YELLOW%
 ECHO ╔═════════════════════════════╗
 ECHO ║A.返回上级菜单               ║
-ECHO ║1.正常重启                   ║
+ECHO ║1.重启至系统                 ║
 ECHO ║2.重启至Bootloader/Fastboot  ║
 ECHO ║3.重启至recovery             ║
 ECHO ║4.重启至9008                 ║

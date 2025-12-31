@@ -294,7 +294,7 @@ echo %INFO% 会话创建成功: [!SESSION_ID!]%RESET%
 
 REM 推送APK文件到设备临时目录
 echo %INFO% 推送APK文件到设备...%RESET%
-adb push "!APK_PATH!" /data/local/tmp/!APK_NAME!
+adb wait-for-device push "!APK_PATH!" /data/local/tmp/!APK_NAME!
 
 REM 写入会话
 echo %INFO% 写入安装会话...%RESET%
@@ -329,7 +329,7 @@ echo %CYAN%正在安装：%RESET%%PINK%%sel__file_path%%RESET%
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
 REM 执行安装并将输出重定向到临时文件
-adb wait-for-device install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
+adb wait-for-device install -r -t -d --no-streaming "%sel__file_path%" > ".\tmp\instapptmp.txt"
 
 REM 检查输出中是否包含Success
 find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
