@@ -149,7 +149,7 @@ set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
 if "%MENU%"=="A" goto MENU
 if "%MENU%"=="a" goto MENU
 if "%MENU%"=="1" CLS & call qmmi & pause & goto control
-if "%MENU%"=="2" CLS & device_check.exe adb & start scrcpy-noconsole.vbs & goto control
+if "%MENU%"=="2" CLS & call scrcpy-ui.bat & goto control
 if "%MENU%"=="3" CLS & call listbuild & goto control
 if "%MENU%"=="4" CLS & call opencharge & goto control
 if "%MENU%"=="5" CLS & call innermodel & ECHO.%YELLOW%按任意键返回%RESET% & pause >nul & goto control
@@ -284,7 +284,7 @@ set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
 if "%MENU%"=="A" goto MENU
 if "%MENU%"=="a" goto MENU
 if "%MENU%"=="1" CLS & call todesk & goto help
-if "%MENU%"=="1" CLS & call patch123 & goto help
+if "%MENU%"=="2" CLS & call patch123 & goto help
 if "%MENU%"=="3" CLS & start https://www.123865.com/s/Q5JfTd-hEbWH & goto help
 if "%MENU%"=="4" CLS & start https://www.123865.com/s/Q5JfTd-HEbWH & goto help
 if "%MENU%"=="5" CLS & start https://www.123684.com/s/Q5JfTd-cEbWH & goto help

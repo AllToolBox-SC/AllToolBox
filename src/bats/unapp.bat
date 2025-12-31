@@ -25,6 +25,7 @@ goto MAIN_MENU
 :UNINSTALL
 echo.
 echo %YELLOW%卸载应用%RESET%
+set package_name=""
 set /p package_name=%CYAN%请输入包名:%RESET% 
 if "%package_name%"=="" (
     echo %ERROR%未输入包名！%RESET%
@@ -32,14 +33,18 @@ if "%package_name%"=="" (
 )
 
 echo %WARN% 确认卸载应用: %PINK%%package_name%%RESET%
+set confirm=""
 set /p confirm=%YELLOW%确定卸载？(y/n):%RESET% 
 if /i "%confirm%"=="y" (
-    adb uninstall %package_name%
-    if %errorlevel% equ 0 (
+    adb uninstall %package_name% > ".\tmp\unapptmp.txt"
+    find /i "Success" "%cd%\tmp\unapptmp.txt" >nul
+    if !errorlevel! equ 0 (
         echo %GREEN% 卸载成功！%RESET%
     ) else (
         echo %ERROR% 卸载失败！%RESET%
     )
 )
-pause
+
+echo %info%按任意键返回...%RESET%
+pause >nul
 goto MAIN_MENU

@@ -1,13 +1,14 @@
-ECHO.%INFO%脚本版本为1.2.6%RESET%
+ECHO.%INFO%脚本版本为1.2.7%RESET%
 ECHO.%INFO%更新日志：%RESET%
-ECHO.%INFO%1.使一键root的更加自动化并修复部分回显信息%RESET%
-ECHO.%INFO%2.一键root添加了一个模块和一个应用%RESET%
-ECHO.%INFO%3.用c++重构双击运行，更好的兼容性以及响应速度%RESET%
-ECHO.%INFO%4.增加解锁123云盘功能，使大家能更好的下载文件%RESET%
-ECHO.%INFO%5.增加工具启动时路径是否包含空格判断%RESET%
-ECHO.%INFO%6.增加离线OTA兼容性判断%RESET%
-ECHO.%INFO%7.增加一键root中“断点续刷”功能，如果在root到一半时因为外部原因导致程序退出，可以紧接着继续root%RESET%
-ECHO.%INFO%8.增加一键root中遇到错误时可以跳过安装应用%RESET%
-ECHO.%INFO%9.修复不管什么系统版本总是提示Windows 11的问题%RESET%
-ECHO.%INFO%10.高级重启，增加跳过引导%RESET%
-ECHO.%INFO%11.把修改的版本号改到最新版本，并附加修改utc等%RESET%
+ECHO.%INFO%1.修复“断点续刷”跳转问题%RESET%
+ECHO.%INFO%2.修复一键root过程中安装应用时可能重启问题%RESET%
+ECHO.%INFO%3.添加安装模块后删除掉临时文件%RESET%
+ECHO.%INFO%4.更新xtc patch%RESET%
+ECHO.%INFO%5.修复不能正常跳转解除123云盘安装限制%RESET%
+ECHO.%INFO%6.增加如同批量安装apk那样批量安装magisk模块%RESET%
+ECHO.%INFO%7.增加投屏控制菜单包含18个可选项%RESET%
+ECHO.%INFO%8.优化自动激活，防止息屏问题%RESET%
+ECHO.%INFO%9.修复检查是否有systemUI的问题%RESET%
+ECHO.%INFO%10.修复卸载应用失败，还提示成功的问题%RESET%
+ECHO.%INFO%11.增加root后优化(可选)%RESET%
+ECHO.%INFO%12.工具箱UI已在计划中%RESET%
