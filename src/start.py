@@ -42,6 +42,8 @@ key = False
 
 LINE = "-" * 68
 
+
+
 def menu() -> str:
     global style
     if os.path.exists("mod") and os.path.isdir("mod"):
@@ -85,7 +87,8 @@ def menu() -> str:
         ],
         default="onekeyroot",
         style=style,
-        key_bindings=kb
+        key_bindings=kb,
+        mouse_support=True
     )
 
     clear(); return result
@@ -107,7 +110,9 @@ def appset():
             ("3", "安装xtc状态栏"),
             ("4", "设置微信QQ为开机自启应用"),
             ("5", "解除z10安装限制"),
-        ]
+        ],
+        style=style,
+        mouse_support=True
     )
     if result == "A":
         clear(); return
@@ -138,6 +143,7 @@ def control():
             ("5", "型号与innermodel对照表"),
             ("6", "高级重启"),
         ],
+        mouse_support=True
     )
     if result == "A":
         clear(); return
@@ -173,7 +179,8 @@ def flash():
             ("7", "刷入XTC Patch"),
             ("8", "刷入Magisk模块"),
         ],
-        style=style
+        style=style,
+        mouse_support=True
     )
     if result == "A":
         clear(); return
@@ -209,6 +216,7 @@ def xtcservice():
             ("3", "离线OTA升级"),
         ],
         style=style,
+        mouse_support=True
     )
     if result == "A":
         clear(); return
@@ -236,6 +244,7 @@ def debug():
             ("5", "debug sel"),
         ],
         style=style,
+        mouse_support=True
     )
     if result == "A":
         clear(); return
@@ -287,6 +296,8 @@ def help_menu():
             ("7", "开发文档"),
             ("8", "123云盘解除下载限制")
         ],
+        style=style,
+        mouse_support=True
     )
     match result:
         case "A":
@@ -344,7 +355,9 @@ def load_mod_menu():
 
     result = choice(
         message="已加载扩展",
-        options=options
+        options=options,
+        style=style,
+        mouse_support=True
     )
 
     if result == "A":
@@ -368,6 +381,8 @@ def mod():
             ("2", "安装扩展"),
             ("3", "卸载扩展"),
         ],
+        style=style,
+        mouse_support=True
     )
 
     if result == "A":
@@ -441,7 +456,9 @@ def pre_main() -> bool:
     global flag
     run("@echo off")
     run("setlocal enabledelayedexpansion")
-
+    if os.getenv("ATB_OLD_MENU", "0") == "1":
+        run("call start.bat")
+        sys.exit()
     # subprocess.run(["chcp", "65001"], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print_formatted_text(HTML(info + "正在启动中..."), style=style)
     colorama.init(autoreset=True)
@@ -479,16 +496,18 @@ def pre_main() -> bool:
             print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
     run("call withone")
     run("call afterup")
-    print_formatted_text(HTML(info + "正在检查更新..."), style=style)
-    run("call upall.bat run")
-    print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
-    run("call checkwin")
-    adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
-    adb_process.wait()
-    if adb_process.returncode != 0:
-        print_formatted_text(HTML(error + "ADB检查失败，返回值：", str(adb_process.returncode)), style=style)
-        return False
-    print_formatted_text(HTML(info + "检查ADB命令成功"), style=style)
+    if os.getenv("ATB_SKIP_UPDATE", 0) != 1:
+        print_formatted_text(HTML(info + "正在检查更新..."), style=style)
+        run("call upall.bat run")
+    if os.getenv("ATB_SKIP_PLATFORM_CHECK", 0) != 1:
+        print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
+        run("call checkwin")
+        adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
+        adb_process.wait()
+        if adb_process.returncode != 0:
+            print_formatted_text(HTML(error + "ADB检查失败，返回值：", str(adb_process.returncode)), style=style)
+            return False
+        print_formatted_text(HTML(info + "检查ADB命令成功"), style=style)
     whoyou = open("whoyou.txt", "w", encoding="gbk")
     whoyou.write("2")
     whoyou.close()
@@ -527,6 +546,7 @@ def main() -> int:
     global style
     try:
         clear()
+
         pre = pre_main() if not flag else True
         if not pre: return 1
         run("call logo")
