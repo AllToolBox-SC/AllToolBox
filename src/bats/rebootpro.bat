@@ -50,10 +50,10 @@ timeout /t 2 >nul
 goto rebootP-reboot-edl
 :rebootP-reboot-edl-run
 call edlport
-QSaharaServer.exe -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\%whatmbn%
+QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\%whatmbn%
 :noQS
 call edlport
-qfh_loader.exe --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
 ECHO %INFO%完成！，按任意键继续%RESET%
 pause >nul
 goto rebootP

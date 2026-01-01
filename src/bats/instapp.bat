@@ -1,275 +1,210 @@
 @echo off
 setlocal enabledelayedexpansion
-if "%1"=="" goto MAIN_MENU
-set sel__file_path=%1
-goto callinst
-:MAIN_MENU
-CLS
-call logo.bat
-ECHO %ORANGE%安装应用菜单%YELLOW%
-ECHO ╔══════════════════════════════════════════════════╗
-ECHO ║A.返回上级菜单                                    ║
-ECHO ║1.选择并安装单个APK文件                           ║
-ECHO ║2.选择并安装多个APK文件                           ║
-ECHO ║3.选择一个文件夹并安装其中的所有APK文件           ║
-ECHO ║4.检查adb设备连接                                 ║
-ECHO ╚══════════════════════════════════════════════════╝
-ECHO.%RESET%
-set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
-if "%MENU%"=="A" (
-    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    exit /b
-)
-if "%MENU%"=="a" (
-    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    exit /b
-)
-if "%MENU%"=="1" goto INSTALL_SINGLE_SEL
-if "%MENU%"=="2" goto INSTALL_MULTI_SEL
-if "%MENU%"=="3" goto INSTALL_FOLDER_SEL
-if "%MENU%"=="4" goto CHECK_DEVICE
-ECHO %ERROR%输入错误，请重新输入！%RESET%
-timeout /t 2 >nul
-goto MAIN_MENU
-
-:INSTALL_SINGLE_SEL
-setlocal enabledelayedexpansion
-echo.
-echo %INFO% 正在打开文件选择对话框...%RESET%
-call sel file s . [apk]
-
-echo.
-echo %INFO% 安装信息：%RESET%
-echo %CYAN%文件：%RESET%%PINK%%sel__file_path%%RESET%
-echo %CYAN%名称：%RESET%%WHITE%%sel__file_fullname%%RESET%
-for %%A in ("%sel__file_path%") do (
-    set SIZE_BYTES=%%~zA
-    set /a SIZE_MB=%%~zA/1024/1024
-)
-echo %CYAN%大小：%RESET%%WHITE%!SIZE_BYTES! 字节 (!SIZE_MB! MB)%RESET%
-ECHO.请接入ADB设备...
-device_check.exe adb&&ECHO.
-ECHO.
-
-echo %INFO% 正在安装应用...%RESET%
-
+set args1=%1
+set args2=%2
+set args3=%3
+:callinst
+echo %CYAN%正在安装：%RESET%%PINK%%args1%%RESET%
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
 REM 执行安装并将输出重定向到临时文件
-adb wait-for-device install -r -t -d  "%sel__file_path%" > ".\tmp\instapptmp.txt"
-
+if "%args2%"=="" adb wait-for-device install -r -t -d --no-streaming "%args1%" > ".\tmp\instapptmp.txt"
+if "%args2%"=="install" adb wait-for-device install -r -t -d --no-streaming "%args1%" > ".\tmp\instapptmp.txt"
+if "%args2%"=="data" goto data
+if "%args2%"=="create" goto create
+if "%args2%"=="3install" goto 3install
+:instfind
 REM 检查输出中是否包含Success
 find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
 if !errorlevel! equ 0 (
     echo %GREEN% 安装成功！%RESET%
-) else (
-    echo %ERROR% 安装失败！正在尝试备用方案[pm install-create]%RESET%
-    call :ALTERNATIVE_INSTALL "%sel__file_path%" "!SIZE_BYTES!"
-    if !errorlevel! equ 0 (
-        echo %GREEN% 备用方案安装成功！%RESET%
-    ) else (
-        echo %ERROR% 备用方案也失败了！%RESET%
-    )
-)
-
-REM 删除临时文件
-if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-if not "%1"=="" exit /b
-echo.
-echo.按任意键返回菜单
-pause >nul
-endlocal
-goto MAIN_MENU
-
-:INSTALL_MULTI_SEL
-setlocal enabledelayedexpansion
-echo.
-echo %INFO% 正在打开文件选择对话框(多选)...%RESET%
-call sel file m . [apk]
-
-echo.
-echo %INFO% 选择的文件列表：%RESET%
-set COUNT=0
-for %%f in (%sel__files:/= %) do (
-    set /a COUNT+=1
-    echo %CYAN%!COUNT!.%RESET% %WHITE%%%f%RESET%
-    if defined FILE_LIST (
-        set "FILE_LIST=!FILE_LIST! "%%f""
-    ) else (
-        set "FILE_LIST="%%f""
-    )
-)
-ECHO.请接入ADB设备...
-device_check.exe adb&&ECHO.
-echo.
-echo %INFO% 开始批量安装...%RESET%
-set SUCCESS=0
-set FAILED=0
-
-REM 创建临时目录
-if not exist ".\tmp" mkdir ".\tmp"
-
-for %%i in (%sel__files:/= %) do (
-    echo.
-    echo %CYAN%正在安装: %%~nxi%RESET%
-    for %%A in ("%%i") do set SIZE_BYTES=%%~zA
-    
-    REM 执行安装并将输出重定向到临时文件
-    adb wait-for-device install -r -t -d "%%i" > ".\tmp\instapptmp.txt" 2>&1
-    
-    REM 检查输出中是否包含Success
-    find /i "Success" ".\tmp\instapptmp.txt" >nul
-    if !errorlevel! equ 0 (
-        echo %GREEN% 成功%RESET%
-        set /a SUCCESS+=1
-    ) else (
-        echo %ERROR% 失败，尝试备用方案%RESET%
-        call :ALTERNATIVE_INSTALL "%%i" "!SIZE_BYTES!"
-        if !errorlevel! equ 0 (
-            echo %GREEN% 备用方案成功%RESET%
-            set /a SUCCESS+=1
-        ) else (
-            echo %ERROR% 备用方案失败%RESET%
-            set /a FAILED+=1
-        )
-    )
-    
-    REM 删除临时文件
     if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-)
+    endlocal
+    set /a SUCCESS+=1
+    exit /b
+) else goto error
 
-echo.
-echo %GREEN%批量安装完成！%RESET%
-echo %CYAN%总计：%RESET%%WHITE%!COUNT!%RESET% %CYAN%个应用%RESET%
-echo %GREEN%成功：%RESET%%WHITE%!SUCCESS!%RESET% %CYAN%个%RESET%
-echo %RED%失败：%RESET%%WHITE%!FAILED!%RESET% %CYAN%个%RESET%
-echo.按任意键返回菜单
-pause >nul
-endlocal
-goto MAIN_MENU
+:data
+echo %INFO% 使用 data/app 安装方式...%RESET%
 
-:INSTALL_FOLDER_SEL
-setlocal enabledelayedexpansion
-echo.
-echo %INFO% 正在打开文件夹选择对话框...%RESET%
-call sel folder s .
-
-echo %INFO% 选择的文件夹：%RESET%%PINK%%sel__folder_path%%RESET%
-
-echo.
-echo %INFO% 扫描APK文件...%RESET%
-set COUNT=0
-for %%i in ("%sel__folder_path%\*.apk") do (
-    set /a COUNT+=1
-    set "FILE_!COUNT!=%%i"
-    echo %CYAN%!COUNT!.%RESET% %WHITE%%%i%RESET%
-)
-
-if !COUNT! equ 0 (
-    echo %ERROR% 在指定文件夹中未找到APK文件%RESET%
-    pause
-    goto MAIN_MENU
-)
-ECHO.请接入ADB设备...
-device_check.exe adb&&ECHO.
-echo.
-echo %INFO% 开始批量安装...%RESET%
-set SUCCESS=0
-set FAILED=0
+for %%A in ("%args1%") do set APK_NAME=%%~nxA
 
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
+adb root | find "restarting" 1>nul 2>nul && goto data-root
+adb shell "su -c magisk -v" && goto data-su
+echo %error% 设备未获得root权限%RESET%
+goto error
 
-for /l %%n in (1,1,!COUNT!) do (
-    set "file=!FILE_%%n!"
-    for %%A in ("!file!") do (
-        set "filename=%%~nxA"
-        set SIZE_BYTES=%%~zA
-    )
-    echo.
-    echo %CYAN%正在安装: !filename!%RESET%
-    
-    REM 执行安装并将输出重定向到临时文件
-    adb wait-for-device install -r -t -d "!file!" > ".\tmp\instapptmp.txt" 2>&1
-    
-    REM 检查输出中是否包含Success
-    find /i "Success" ".\tmp\instapptmp.txt" >nul
-    if !errorlevel! equ 0 (
-        echo %GREEN% 成功%RESET%
-        set /a SUCCESS+=1
-    ) else (
-        echo %ERROR% 失败，尝试备用方案%RESET%
-        call :ALTERNATIVE_INSTALL "!file!" "!SIZE_BYTES!"
-        if !errorlevel! equ 0 (
-            echo %GREEN% 备用方案成功%RESET%
-            set /a SUCCESS+=1
-        ) else (
-            echo %ERROR% 备用方案失败%RESET%
-            set /a FAILED+=1
-        )
-    )
-    
-    REM 删除临时文件
+:data-su
+echo %GREEN% 设备已获得su权限%RESET%
+
+REM 生成随机目录名（避免冲突）
+set "RANDOM_DIR=copydata-!RANDOM!!RANDOM!"
+echo %INFO% 创建应用目录：/data/app/!RANDOM_DIR!%RESET%
+
+REM 创建应用目录
+adb shell su -c "mkdir -p /data/app/!RANDOM_DIR!" > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 创建应用目录失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
     if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
 )
 
+REM 推送APK文件到应用目录
+echo %INFO% 推送APK文件到应用目录...%RESET%
+adb wait-for-device push "!args1!" /data/local/tmp/!APK_NAME! > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 推送APK到临时目录失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
+    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
+)
+
+REM 将APK从临时目录移动到应用目录
+echo %INFO% 移动APK到应用目录...%RESET%
+adb shell su -c "mv /data/local/tmp/!APK_NAME! /data/app/!RANDOM_DIR!/base.apk" > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 移动APK文件失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
+    adb shell su -c "rm -rf /data/app/!RANDOM_DIR!" >nul 2>&1
+    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
+)
+
+REM 设置权限
+echo %INFO% 设置文件权限...%RESET%
+adb shell su -c "chmod 755 /data/app/!RANDOM_DIR!" >nul 2>&1
+adb shell su -c "chmod 644 /data/app/!RANDOM_DIR!/base.apk" >nul 2>&1
+
+REM 设置所有者（通常为system:system）
+echo %INFO% 设置文件所有者...%RESET%
+adb shell su -c "chown system:system /data/app/!RANDOM_DIR!/" >nul 2>&1
+adb shell su -c "chown system:system /data/app/!RANDOM_DIR!/base.apk" >nul 2>&1
+
+echo %GREEN% APK已复制到/data/app/!RANDOM_DIR!/base.apk%RESET%
+
+REM 检查是否需要重启包管理器或系统
 echo.
-echo %GREEN%批量安装完成！%RESET%
-echo %CYAN%总计：%RESET%%WHITE%!COUNT!%RESET% %CYAN%个应用%RESET%
-echo %GREEN%成功：%RESET%%WHITE%!SUCCESS!%RESET% %CYAN%个%RESET%
-echo %RED%失败：%RESET%%WHITE%!FAILED!%RESET% %CYAN%个%RESET%
-echo.按任意键返回菜单
-pause >nul
-endlocal
-goto MAIN_MENU
+echo %YELLOW% data/app安装方式可能需要重启应用包管理器或系统才能生效%RESET%
+echo %YELLOW%请选择操作：
+echo 1. 重启应用包管理器[推荐]
+echo 2. 重启设备
+echo 3. 不执行任何操作
+set /p RESTART_CHOICE=%YELLOW%请输入序号并按下回车键(默认1): %RESET%
 
-:CHECK_DEVICE
-setlocal enabledelayedexpansion
-echo.
-echo %INFO% 检查设备连接...%RESET%
+if "!RESTART_CHOICE!"=="" set "RESTART_CHOICE=1"
 
-REM 创建临时目录
-if not exist ".\tmp" mkdir ".\tmp"
-
-REM 执行adb devices命令并将输出重定向到临时文件
-adb devices > ".\tmp\instapptmp.txt" 2>&1
-
-REM 计算文件行数（不包括空行）
-set /a DEVICE_COUNT=0
-for /f "usebackq delims=" %%i in (".\tmp\instapptmp.txt") do (
-    set /a DEVICE_COUNT+=1
+if "!RESTART_CHOICE!"=="1" (
+    echo %INFO% 重启应用包管理器...%RESET%
+    adb shell su -c "am force-stop com.android.packageinstaller" >nul 2>&1
+    echo %GREEN% 应用包管理器已重启%RESET%
+    echo %INFO% 等待5秒钟让系统识别新应用%RESET%
+    busybox sleep 5
 )
-
-REM 行数减1（去掉标题行）
-set /a DEVICE_COUNT=!DEVICE_COUNT!-1
-
-REM 判断设备数量并显示相应信息
-if !DEVICE_COUNT! equ 0 (
-    echo %ERROR% 没有找到连接的设备%RESET%
-) else (
-    echo %CYAN%ADB设备列表：%RESET%
-    type ".\tmp\instapptmp.txt"
-    echo.
-    echo %GREEN%找到 !DEVICE_COUNT! 个设备%RESET%
+if "!RESTART_CHOICE!"=="2" (
+    echo %INFO% 正在重启设备...%RESET%
+    adb reboot
+    device_check.exe adb&&ECHO.
 )
+echo %INFO% 未执行任何操作，应用可能需要重启设备才能生效%RESET%
 
-REM 删除临时文件
+REM 清理临时文件
+adb shell su -c "rm -f /data/local/tmp/!APK_NAME!" >nul 2>&1
+echo %GREEN% data/app安装完成！%RESET%
+echo %CYAN%应用路径：/data/app/!RANDOM_DIR!/base.apk%RESET%
 if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-
-echo.
-echo.按任意键返回菜单
-pause >nul
 endlocal
-goto MAIN_MENU
+set /a SUCCESS+=1
+exit /b
 
-:ALTERNATIVE_INSTALL
-ECHO.请接入ADB设备...
-device_check.exe adb&&ECHO.
+:data-root
+echo %GREEN% 设备已获得root权限%RESET%
+REM 生成随机目录名（避免冲突）
+set "RANDOM_DIR=copydata-!RANDOM!!RANDOM!"
+echo %INFO% 创建应用目录：/data/app/!RANDOM_DIR!%RESET%
 
-setlocal enabledelayedexpansion
-set "APK_PATH=%~1"
-set "APK_SIZE=%~2"
-set "APK_NAME=%~nx1"
+REM 创建应用目录
+adb shell mkdir -p /data/app/!RANDOM_DIR! > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 创建应用目录失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
+    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
+)
+
+REM 推送APK文件到应用目录
+echo %INFO% 推送APK文件到应用目录...%RESET%
+adb wait-for-device push "!args1!" /data/local/tmp/!APK_NAME! > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 推送APK到临时目录失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
+    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
+)
+
+REM 将APK从临时目录移动到应用目录
+echo %INFO% 移动APK到应用目录...%RESET%
+adb shell mv /data/local/tmp/!APK_NAME! /data/app/!RANDOM_DIR!/base.apk > ".\tmp\instapptmp.txt" 2>&1
+if !errorlevel! neq 0 (
+    echo %ERROR% 移动APK文件失败%RESET%
+    type ".\tmp\instapptmp.txt" 2>nul
+    adb shell rm -rf /data/app/!RANDOM_DIR! >nul 2>&1
+    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+    goto error
+)
+
+REM 设置权限
+echo %INFO% 设置文件权限...%RESET%
+adb shell chmod 755 /data/app/!RANDOM_DIR! >nul 2>&1
+adb shell chmod 644 /data/app/!RANDOM_DIR!/base.apk >nul 2>&1
+
+REM 设置所有者（通常为system:system）
+echo %INFO% 设置文件所有者...%RESET%
+adb shell chown system:system /data/app/!RANDOM_DIR!/ >nul 2>&1
+adb shell chown system:system /data/app/!RANDOM_DIR!/base.apk >nul 2>&1
+
+echo %GREEN% APK已复制到/data/app/!RANDOM_DIR!/base.apk%RESET%
+
+REM 检查是否需要重启包管理器或系统
+echo.
+echo %YELLOW% data/app安装方式可能需要重启应用包管理器或系统才能生效%RESET%
+echo %YELLOW%请选择操作：
+echo 1. 重启应用包管理器[推荐]
+echo 2. 重启设备
+echo 3. 不执行任何操作
+set /p RESTART_CHOICE=%YELLOW%请输入序号并按下回车键(默认1): %RESET%
+
+if "!RESTART_CHOICE!"=="" set "RESTART_CHOICE=1"
+
+if "!RESTART_CHOICE!"=="1" (
+    echo %INFO% 重启应用包管理器...%RESET%
+    adb shell am force-stop com.android.packageinstaller >nul 2>&1
+    adb shell pm disable com.android.packageinstaller && pm enable com.android.packageinstaller >nul 2>&1
+    echo %GREEN% 应用包管理器已重启%RESET%
+    echo %INFO% 等待5秒钟让系统识别新应用%RESET%
+    busybox sleep 5
+)
+if "!RESTART_CHOICE!"=="2" (
+    echo %INFO% 正在重启设备...%RESET%
+    adb reboot
+    device_check.exe adb&&ECHO.
+)
+echo %INFO% 未执行任何操作，应用可能需要重启设备才能生效%RESET%
+
+REM 清理临时文件
+adb shell rm -f /data/local/tmp/!APK_NAME! >nul 2>&1
+echo %GREEN% data/app安装完成！%RESET%
+echo %CYAN%应用路径：/data/app/!RANDOM_DIR!/base.apk%RESET%
+if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+endlocal
+set /a SUCCESS+=1
+exit /b
+
+:create
+for %%A in ("%args1%") do set APK_SIZE=%%~zA
+for %%A in ("%args1%") do set APK_NAME=%%~nxA
 
 echo %INFO% 使用 pm install-create 安装...%RESET%
 
@@ -286,15 +221,14 @@ if "!SESSION_ID!"=="" (
     echo %ERROR% 创建安装会话失败%RESET%
     REM 删除临时文件
     if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    endlocal
-    exit /b 1
+    goto error
 )
 
 echo %INFO% 会话创建成功: [!SESSION_ID!]%RESET%
 
 REM 推送APK文件到设备临时目录
 echo %INFO% 推送APK文件到设备...%RESET%
-adb wait-for-device push "!APK_PATH!" /data/local/tmp/!APK_NAME!
+adb wait-for-device push "!args1!" /data/local/tmp/!APK_NAME!
 
 REM 写入会话
 echo %INFO% 写入安装会话...%RESET%
@@ -303,49 +237,32 @@ adb shell pm install-write !SESSION_ID! base.apk /data/local/tmp/!APK_NAME!
 REM 提交安装并将输出重定向到临时文件
 echo %INFO% 提交安装...%RESET%
 adb shell pm install-commit !SESSION_ID! > ".\tmp\instapptmp.txt" 2>&1
+adb shell rm -f /data/local/tmp/!APK_NAME!
+goto instfind
 
-REM 检查输出中是否包含Success
-find /i "Success" ".\tmp\instapptmp.txt" >nul
-if !errorlevel! equ 0 (
-    echo %GREEN% pm install-create 安装成功%RESET%
-    REM 清理临时文件
-    adb shell rm -f /data/local/tmp/!APK_NAME!
-    REM 删除临时文件
-    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    endlocal
-    exit /b 0
-) else (
-    echo %ERROR% pm install-create 安装失败%RESET%
-    REM 清理临时文件
-    adb shell rm -f /data/local/tmp/!APK_NAME!
-    REM 删除临时文件
-    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    endlocal
-    exit /b 1
-)
+:3install
 
-:callinst
-echo %CYAN%正在安装：%RESET%%PINK%%sel__file_path%%RESET%
+echo %INFO% 使用 第三方安装器 安装...%RESET%
+
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
-REM 执行安装并将输出重定向到临时文件
-adb wait-for-device install -r -t -d --no-streaming "%sel__file_path%" > ".\tmp\instapptmp.txt"
 
-REM 检查输出中是否包含Success
-find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
-if !errorlevel! equ 0 (
-    echo %GREEN% 安装成功！%RESET%
-) else (
-    if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-    set /p yesno=%ERROR% 安装失败！按任意键重试...[输入no可跳过]%RESET%
-    if "%yesno%"=="no" exit /b
-    goto callinst
-)
+REM 推送APK文件到设备临时目录
+echo %INFO% 推送APK文件到设备...%RESET%
+adb wait-for-device push "!args1!" /sdcard/tmp.apk
 
-REM 删除临时文件
+echo %INFO% 开始调用安装器安装...%RESET%
+adb shell am start -a android.intent.action.VIEW -d file:///sdcard/tmp.apk -t application/vnd.android.package-archive > ".\tmp\instapptmp.txt" 2>&1
+echo %INFO% 请在设备上进行安装后按任意键继续
+pause >nul
+echo %GREEN% 安装完成！%RESET%
 if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
-
 endlocal
+set /a SUCCESS+=1
 exit /b
 
-
+:error
+if exist ".\tmp\instapptmp.txt" del ".\tmp\instapptmp.txt" >nul 2>&1
+set /p yesno=%ERROR% 安装失败！按任意键重试...[输入no跳过]%RESET%
+if "%yesno%"=="no" endlocal&&set /a FAILED+=1&&exit /b
+goto callinst

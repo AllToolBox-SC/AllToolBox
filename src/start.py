@@ -4,6 +4,7 @@ import os
 import sys
 import shutil
 import time
+from typing import Optional, Tuple
 from prompt_toolkit import (
     choice, 
     print_formatted_text, 
@@ -17,11 +18,13 @@ from prompt_toolkit.shortcuts import clear, set_title
 from prompt_toolkit.key_binding import KeyBindings
 import colorama
 import subprocess
+import socket
+
 style = Style.from_dict({
     "yellow": "fg:yellow",
     "red": "fg:red",
     "orange": "fg:orange",
-    "info": "fg:lightblue",
+    "info": "fg:#3B78FF",
     "black": "fg:black",
     "cyan": "fg:cyan",
     "green": "fg:green",
@@ -94,7 +97,7 @@ def menu() -> str:
     clear(); return result
 
 def run(cmd):
-    subprocess.run(["cmd.exe", "/c", f"@echo off && setlocal enabledelayedexpansion > nul && call .\\color.bat && set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ && set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; && {cmd}"], shell=True)
+    subprocess.run(["cmd.exe", "/c", f"@echo off && setlocal enabledelayedexpansion > nul && call .\\color.bat && set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ && set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; && {cmd} && endlocal"], shell=True)
 
 def appset():
     global style
@@ -117,7 +120,7 @@ def appset():
     if result == "A":
         clear(); return
     if result == "1":
-        run("call instapp")
+        run("call userinstapp")
     if result == "2":
         run("call unapp")
     if result == "3":
@@ -172,37 +175,48 @@ def flash():
             ("A", "返回上级菜单"),
             ("1", "从云端更新文件"),
             ("2", "导入本地root文件"),
-            ("3", "一键root"),
+            ("3", "一键root[不刷userdata]"),
             ("4", "恢复出厂设置"),
             ("5", "开机自刷Recovery"),
             ("6", "刷入TWRP"),
             ("7", "刷入XTC Patch"),
             ("8", "刷入Magisk模块"),
+            ("9", "备份与恢复"),
+            ("10", "安卓8.1root后优化")
         ],
         style=style,
         mouse_support=True
     )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        run("call cloud")
-    if result == "2":
-        run("call pashroot")
-    if result == "3":
-        run("call root nouserdata")
-    if result == "4":
-        run("call miscre")
-    if result == "5":
-        run("call pashtwrppro")
-    if result == "6":
-        run("call pashtwrp")
-    if result == "7":
-        run("call xtcpatch")
-    if result == "8":
-        run("call userinstmodule")
+    match result:
+        case "A":
+            clear(); return
+        case "1":
+            run("call cloud")
+        case "2":
+            run("call pashroot")
+        case "3":
+            run("call root nouserdata")
+        case "4":
+            run("call miscre")
+        case "5":
+            run("call pashtwrppro")
+        case "6":
+            run("call pashtwrp")
+        case "7":
+            run("call xtcpatch")
+        case "8":
+            run("call userinstmodule")
+        case "9":
+            run("call backup")
+        case "10":
+            run("call rootpro")
+        case _:
+            print_formatted_text(HTML(error + "输入错误，请重新输入"), style=style)
+        
     flash()
 
 def xtcservice():
+
     global style
     run("cls")
     run("call logo")
@@ -211,7 +225,7 @@ def xtcservice():
         #text="请选择",
         options=[
             ("A", "返回上级菜单"),
-            ("1", "手表强加好友"),
+            ("1", "手表强加好友[已弃用]"),
             ("2", "ADB/自检校验码计算"),
             ("3", "离线OTA升级"),
         ],
@@ -484,22 +498,24 @@ def pre_main() -> bool:
                 run(f'cd /d mod\\{item} && call start.bat')
 
     os.chdir("..\\bin")
-    wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+    # wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
-    if wmic.returncode != 0:
-        r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
-        if r.lower() == "y":
-            print_formatted_text(HTML(info + "正在安装WMIC..."), style=style)
-            run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
-            run("call refreshenv")
-        else:
-            print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
+    # if wmic.returncode != 0:
+    #     r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
+    #     if r.lower() == "y":
+    #         print_formatted_text(HTML(info + "坐和放宽，把时间交给我们..."), style=style)
+    #         print_formatted_text(HTML(info + "若提示是否重启，建议选择重启"), style=style)
+    #         run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
+    #         run("call refreshenv")
+    #     else:
+    #         print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
+        
     run("call withone")
     run("call afterup")
-    if os.getenv("ATB_SKIP_UPDATE", 0) != 1:
+    if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
         print_formatted_text(HTML(info + "正在检查更新..."), style=style)
         run("call upall.bat run")
-    if os.getenv("ATB_SKIP_PLATFORM_CHECK", 0) != 1:
+    if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
         run("call checkwin")
         adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
@@ -539,6 +555,19 @@ def pre_main() -> bool:
     flag = True
     clear()
     return True
+
+def check_adb_server() -> Tuple[bool, Optional[Exception]: None]:
+    adb_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    adb_server.settimeout(0.25)
+    try:
+        adb_server.connect(("127.0.0.1", 5037))
+    except socket.timeout:
+        return False
+    except Exception as e:
+        return False, e
+    adb_server.close()
+    return True
+
 
 def main() -> int:
     global flag
@@ -584,7 +613,22 @@ def main() -> int:
 def cleanup(code: int):
     global style
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
-    subprocess.run(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+    if check_adb_server():
+        subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        # TODO: 优化kill-server
+        # try:
+        #     adbd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #     adbd.settimeout(4)
+        #     adbd.connect(("127.0.0.1", 5037))
+        #     cmd = "kill"
+        #     length_hex = f"{len(cmd):04X}"
+        #     adbd.sendall((length_hex + cmd).encode("ascii"))
+        #     adbd.close()
+        # except socket.timeout, Exception:
+        #     pass
+
+
+    run("endlocal")
     sys.exit(code)
 
 if __name__ == "__main__":

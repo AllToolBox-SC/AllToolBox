@@ -238,4 +238,4 @@ ENDLOCAL & set imgkit__magiskpatch__vername=%magiskver_show%& set imgkit__magisk
 goto :eof
 
 :FATAL
-ECHO. & ECHO.脚本遇到问题, 无法继续运行. 按任意键退出...& pause>nul & EXIT
+ECHO. & ECHO.脚本出现致命错误，按任意键退出...& pause>nul & EXIT

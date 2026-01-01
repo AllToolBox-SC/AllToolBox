@@ -1,14 +1,13 @@
-ECHO.%INFO%脚本版本为1.2.7%RESET%
+ECHO.%INFO%脚本版本为1.2.8%RESET%
 ECHO.%INFO%更新日志：%RESET%
-ECHO.%INFO%1.修复“断点续刷”跳转问题%RESET%
-ECHO.%INFO%2.修复一键root过程中安装应用时可能重启问题%RESET%
-ECHO.%INFO%3.添加安装模块后删除掉临时文件%RESET%
-ECHO.%INFO%4.更新xtc patch%RESET%
-ECHO.%INFO%5.修复不能正常跳转解除123云盘安装限制%RESET%
-ECHO.%INFO%6.增加如同批量安装apk那样批量安装magisk模块%RESET%
-ECHO.%INFO%7.增加投屏控制菜单包含18个可选项%RESET%
-ECHO.%INFO%8.优化自动激活，防止息屏问题%RESET%
-ECHO.%INFO%9.修复检查是否有systemUI的问题%RESET%
-ECHO.%INFO%10.修复卸载应用失败，还提示成功的问题%RESET%
-ECHO.%INFO%11.增加root后优化(可选)%RESET%
-ECHO.%INFO%12.工具箱UI已在计划中%RESET%
+ECHO.%INFO%1.修复“断点续刷”后无法修补boot的问题%RESET%
+ECHO.%INFO%2.提升临时环境变量优先级%RESET%
+ECHO.%INFO%3.添加9008引导与刷入时错误拦截和错误回显%RESET%
+ECHO.%INFO%4.优化局部变量的代码%RESET%
+ECHO.%INFO%5.在进入qmmi功能中加入z10%RESET%
+ECHO.%INFO%6.优化与修复一键root%RESET%
+ECHO.%INFO%7.增加备份相册%RESET%
+ECHO.%INFO%8.增加7.1.1和4.4.4安装xp框架%RESET%
+ECHO.%INFO%9.增加更多安装应用方式%RESET%
+ECHO.%INFO%10.新增/更新8.1机型Root后优化[原生修复]%RESET%
+ECHO.%INFO%11.修复自动激活systemplus%RESET%
