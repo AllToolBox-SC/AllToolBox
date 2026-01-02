@@ -9,6 +9,7 @@
 #include <string>
 #include <windows.h>
 #include <sddl.h>
+#include <tchar.h>
 
 BOOL IsRunAsAdmin();
 void Message();

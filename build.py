@@ -52,7 +52,7 @@ def main():
         os.makedirs("build")
     os.makedirs("./build/main", exist_ok=True)
     subprocess.run(["windres.exe", "-i", "./src/launch.rc", "-o", "./build/icon.o"])
-    subprocess.run(["g++.exe", "-static", "./src/launch.cpp", "./build/icon.o", "-municode", "-o", "build/main/双击运行.exe".encode("utf-8"), "-lstdc++", "-lpthread"])
+    subprocess.run(["g++.exe", "-static", "./src/launch.cpp", "./build/icon.o", "-municode", "-o", "build/main/双击运行.exe".encode("utf-8"), "-finput-charset=UTF-8", "-fexec-charset=GBK",  "-lstdc++", "-lpthread", "-O3"])
     os.makedirs("./build/main/bin", exist_ok=True)
     os.makedirs("./build/rust", exist_ok=True)
     if not os.path.exists("./.venv/Scripts/python.exe"):
@@ -62,8 +62,14 @@ def main():
         os.makedirs("./build/py")
     os.makedirs("./build/py/dist", exist_ok=True)
     print(os.getcwd())
-    subprocess.run([os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", "./build/py/dist", "src/run_cmd.py"])
-    subprocess.run([os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", "./build/py/dist", "src/start.py"])
+    # subprocess.run([os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", "./build/py/dist", "src/run_cmd.py"])
+    gcc = os.path.dirname(subprocess.run(["cmd", "/c", "where", "gcc.exe"], stdout=subprocess.PIPE).stdout.decode("utf-8").replace("\r\n", ""))
+    print(gcc)
+    if not os.path.exists(os.getenv("LOCALAPPDATA") + r"\Nuitka\Nuitka\Cache\downloads\gcc\x86_64\14.2.0posix-19.1.1-12.0.0-msvcrt-r2\mingw64"):
+        os.makedirs(os.getenv("LOCALAPPDATA") + r"\Nuitka\Nuitka\Cache\downloads\gcc\x86_64\14.2.0posix-19.1.1-12.0.0-msvcrt-r2\mingw64", exist_ok=True)
+        os.symlink(gcc, os.getenv("LOCALAPPDATA") + r"\Nuitka\Nuitka\Cache\downloads\gcc\x86_64\14.2.0posix-19.1.1-12.0.0-msvcrt-r2\mingw64\bin")
+    subprocess.run([os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka", "--onefile", "--lto=yes",  "--output-dir=./build/py/dist", "src/run_cmd.py", "--mingw64"])
+    subprocess.run([os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka", "--onefile", "--lto=yes", "--output-dir=./build/py/dist", "src/start.py", "--mingw64"])
     subprocess.run(["cargo", "build", "--release", "--target-dir", "./build/rust"], shell=True)
     with py7zr.SevenZipFile('bin.7z', mode='r') as z:
         z.extractall(path='./build/main/bin')

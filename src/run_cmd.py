@@ -11,8 +11,9 @@ def get_timestamp():
 
 def execute_command(command):
     print(f'''[{get_timestamp()}] 执行命令: {command}''')
-    result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
-    print(result.stdout)
+    result = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,  text=True)
+    print(result.stdout + "\n" + result.stderr)
+    if result.returncode != 0: return False
     return True
 
 

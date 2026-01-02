@@ -86,13 +86,13 @@ void RunMainBat()
 
 int wmain()
 {
-    SetConsoleOutputCP(CP_WINANSI);
+    SetConsoleOutputCP(936);
     if (!IsRunAsAdmin())
     {
         ElevatePrivileges();
     }
 #if DEBUG
-    std::cout << "[INFO] 程序提权成功" << std::endl;
+    printf("[INFO] 程序提权成功");
 #endif
     RunMainBat();
 

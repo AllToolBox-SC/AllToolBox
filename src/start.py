@@ -3,6 +3,7 @@
 import os
 import sys
 import shutil
+import platform
 import time
 from typing import Optional, Tuple
 from prompt_toolkit import (
@@ -61,9 +62,14 @@ def menu() -> str:
         os.remove("mod") if os.path.isfile("mod") else ...
         os.makedirs("mod", exist_ok=True)
     kb = KeyBindings()
-    @kb.add('R')
+    # @kb.add('R')
+    # def _(event):
+    #     event.app.exit(result="SHIFT_R")
+    
+    @kb.add('D')
     def _(event):
-        event.app.exit(result="SHIFT_R")
+        event.app.exit(result="SHIFT_D")
+
 
     print_formatted_text(ANSI(colorama.Fore.RESET + colorama.Fore.YELLOW + "XTC AllToolBox 控制台&主菜单 " + colorama.Fore.BLUE + "by xgj_236" + colorama.Fore.LIGHTYELLOW_EX))
     # style = Style.from_dict(
@@ -260,18 +266,19 @@ def debug():
         style=style,
         mouse_support=True
     )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        color()
-    if result == "2":
-        run('echo 1>whoyou.txt')
-    if result == "3":
-        run('echo 2>whoyou.txt')
-    if result == "4":
-        run('echo 3>whoyou.txt')
-    if result == "5":
-        sel()
+    match result:
+        case "A":
+            clear(); return
+        case "1":
+            color()
+        case "2":
+            open("whoyou.txt", "w").write("1")
+        case "3":
+            open("whoyou.txt", "w").write("2")
+        case "4":
+            open("whoyou.txt", "w").write("3")
+        case "5":
+            sel()
     debug()
 
 def sel():
@@ -318,7 +325,7 @@ def help_menu():
             clear()
             return
         case "1":
-            run("call todesk")
+            print_formatted_text(HTML(warn + "已弃用该功能"))
         case "2":
             run("start https://www.123865.com/s/Q5JfTd-hEbWH")
         case "3":
@@ -466,6 +473,27 @@ def about():
         style=style
     )
 
+def checkwin() -> Tuple[str, str, str, str]:
+    return (
+        platform.system(),
+        platform.release(),
+        platform.version(),
+        platform.architecture()
+    )
+
+
+def pause():
+    kb = KeyBindings()
+
+    @kb.add('<any>')
+    def _(event):
+        global pressed_key
+        pressed_key = event.key_sequence[0].key
+        event.app.exit()
+    
+    PromptSession(key_bindings=kb).prompt("")
+
+
 def pre_main() -> bool:
     global flag
     run("@echo off")
@@ -517,7 +545,24 @@ def pre_main() -> bool:
         run("call upall.bat run")
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
-        run("call checkwin")
+        # run("call checkwin")
+        os_name, os_release, os_version, arch = checkwin()
+        match arch[0]:
+            case "64bit": arch = "x64"
+            case "32bit": arch = "x86"
+            case _: arch = "arm64-v8a"
+        print_formatted_text(HTML(info + f"当前运行环境:{os_name}{os_release}_{arch}_{os_version}"), style=style)
+        os_vercode = 0
+        try:
+            os_vercode = float(os_release)
+        except ValueError:
+            pass
+        if os_vercode <= 7:
+            print_formatted_text(HTML(error + "此脚本需要 Windows 8 或更高版本"), style=style)
+            pause(); return 1
+        print_formatted_text(HTML(info + f"当前系统: {os_name} {os_release}"), style=style)
+
+        # print_formatted_text(HTML(info + "Windows属性成功检测"), style=style)
         adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
         adb_process.wait()
         if adb_process.returncode != 0:
@@ -527,9 +572,7 @@ def pre_main() -> bool:
     whoyou = open("whoyou.txt", "w", encoding="gbk")
     whoyou.write("2")
     whoyou.close()
-    print_formatted_text(HTML("<yellow>" + LINE + "</yellow>"), style=style)
-    print_formatted_text(HTML(f"""
-        {warn}关于解绑：该工具不提供手表强制解绑服务，如您拾取他人的手表，请联系当地110公安机关归还失主。手表解绑属于非法行为，请归还失主。而不要尝试通过任何手段解除挂失锁
+    print_formatted_text(HTML(f"""{warn}关于解绑：该工具不提供手表强制解绑服务，如您拾取他人的手表，请联系当地110公安机关归还失主。手表解绑属于非法行为，请归还失主。而不要尝试通过任何手段解除挂失锁
         {warn}关于收费：这个工具是完全免费的，如果你付费购买了那么请退款
         {warn}本脚本部分功能可能造成侵权问题，并可能受到法律追究，所以仅供个人使用，请勿用于商业用途
         {info}---请永远相信我们能给你带来免费又好用的工具---
@@ -538,20 +581,10 @@ def pre_main() -> bool:
         {info}作者QQ：3247039462
         {info}工具箱交流与反馈QQ群：907491503
         {info}作者哔哩哔哩账号：https://b23.tv/L54R5ZV
-        {info}bug与建议反馈邮箱：ATBbug@xgj.qzz.io
-    """.replace(" " * 8, "")), style=style)
-    print_formatted_text(HTML("<yellow>" + LINE + "</yellow>"), style=style)
+        {info}bug与建议反馈邮箱：ATBbug@xgj.qzz.io""".replace(" " * 8, "")), style=style)
     print_formatted_text(HTML(info + "按任意键进入主界面"), style=style)
 
-    kb = KeyBindings()
-
-    @kb.add('<any>')
-    def _(event):
-        global pressed_key
-        pressed_key = event.key_sequence[0].key
-        event.app.exit()
-    
-    PromptSession(key_bindings=kb).prompt("")
+    pause()
     flag = True
     clear()
     return True
@@ -569,48 +602,7 @@ def check_adb_server() -> Tuple[bool, Optional[Exception]: None]:
     return True
 
 
-def main() -> int:
-    global flag
-    global key
-    global style
-    try:
-        clear()
-
-        pre = pre_main() if not flag else True
-        if not pre: return 1
-        run("call logo")
-        result = menu()
-        match result:
-            case "SHIFT_R":
-                run("call start.bat"); return 0
-            case "onekeyroot":
-                run("call root.bat")
-            case "openshell":
-                subprocess.run(["cmd.exe", "/k"], shell=True); return 0
-            case "forceupdate":
-                run("call upall.bat up"); return 0
-            case "about": about()
-            case "mods": mod()
-            case "flash-files": flash()
-            case "connection-debug": control()
-            case "man-apps": appset()
-            case "imoo-services": xtcservice()
-            case "help-links":  help_menu()
-            case "exit": return 0
-        return main()
-    except KeyboardInterrupt:
-        if key: 
-            print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
-            return 0
-        else:
-            if not flag:
-                print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
-                return 0
-            key = True
-            clear()
-            return main()
-
-def cleanup(code: int):
+def cleanup(code: int = 0):
     global style
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
     if check_adb_server():
@@ -630,6 +622,51 @@ def cleanup(code: int):
 
     run("endlocal")
     sys.exit(code)
+
+
+def main() -> int:
+    # do
+    global flag
+    global key
+    global style
+    try:
+        clear()
+
+        pre = pre_main() if not flag else True
+        if not pre: return 1
+        run("call logo")
+        result = menu()
+        match result:
+            case "SHIFT_R":
+                run("call start.bat"); return 0
+            case "SHIFT_D": debug()
+            case "onekeyroot":
+                run("call root.bat")
+            case "openshell":
+                subprocess.run(["cmd.exe", "/k"], shell=True)
+            case "forceupdate":
+                run("start cmd /c upall.bat up"); return 0
+            case "about": about()
+            case "mods": mod()
+            case "flash-files": flash()
+            case "connection-debug": control()
+            case "man-apps": appset()
+            case "imoo-services": xtcservice()
+            case "help-links":  help_menu()
+            case "exit": return 0
+        return main() # loop
+    except KeyboardInterrupt:
+        if key: 
+            print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
+            return 0
+        else:
+            if not flag:
+                print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
+                return 0
+            key = True
+            clear()
+            return main()
+
 
 if __name__ == "__main__":
     cleanup(main())

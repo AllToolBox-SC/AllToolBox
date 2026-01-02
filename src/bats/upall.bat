@@ -1,3 +1,4 @@
+@echo off
 goto %1 1>nul 2>nul
 :run
 del /Q /F .\versiontmp.txt 1>nul 2>nul

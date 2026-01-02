@@ -1,3 +1,4 @@
+:: encoding: gbk
 @echo off
 setlocal enabledelayedexpansion
 call color.bat
