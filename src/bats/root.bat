@@ -1,3 +1,7 @@
+@echo off
+call .\color
+setlocal enabledelayedexpansion
+
 :roottmp
 CLS
 if exist .\roottmp.txt (

@@ -1,3 +1,7 @@
+@echo off
+call .\color
+setlocal enabledelayedexpansion
+
 ECHO.%INFO%脚本版本为1.2.9%RESET%
 ECHO.%INFO%更新日志：%RESET%
 ECHO.%INFO%1.修复“断点续刷”后无法修补boot的问题%RESET%
