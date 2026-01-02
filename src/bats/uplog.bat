@@ -1,4 +1,5 @@
-ECHO.%INFO%脚本版本为1.2.8%RESET%
+ECHO.%INFO%脚本版本为1.2.9%RESET%
+ECHO.%INFO%- 优化更新第一部分 -%RESET%
 ECHO.%INFO%更新日志：%RESET%
 ECHO.%INFO%1.修复“断点续刷”后无法修补boot的问题%RESET%
 ECHO.%INFO%2.提升临时环境变量优先级%RESET%
@@ -11,3 +12,7 @@ ECHO.%INFO%8.增加7.1.1和4.4.4安装xp框架%RESET%
 ECHO.%INFO%9.增加更多安装应用方式%RESET%
 ECHO.%INFO%10.新增/更新8.1机型Root后优化[原生修复]%RESET%
 ECHO.%INFO%11.修复自动激活systemplus%RESET%
+ECHO.%INFO%12.实装新版主菜单，使用时遇到问题请反馈%RESET%
+ECHO.%INFO%13.编译时添加g++编译参数-O3，改用Nuitka编译Python部分并启用lto优化取代PyInstaller，让渣机也能流畅运行%RESET%
+ECHO.%INFO%14.logo改为rust-lolcat输出，渐变更加美观%RESET%
+ECHO.%INFO%15.修复了双击运行弹窗乱码的问题%RESET%

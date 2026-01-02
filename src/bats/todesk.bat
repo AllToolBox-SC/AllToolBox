@@ -8,7 +8,7 @@ for /f "tokens=4" %%i in ('reg query "HKEY_CLASSES_ROOT\ToDesk" /v "URL Protocol
 :: 显示结果
 if defined todesk (
     echo %INFO%检查到你电脑中有todesk，路径在: %todesk%%RESET%
-    start "" "%todesk%"
+    start "" ""%todesk%""
     timeout /t 2 /NOBREAK >nul
     exit /b
 ) else (

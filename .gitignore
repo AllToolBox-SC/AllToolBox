@@ -18,3 +18,4 @@ __pycache__/
 /start.spec
 /run_cmd.spec
 /main.spec
+/nuitka-crash-report.xml
