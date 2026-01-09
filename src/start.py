@@ -20,6 +20,9 @@ from prompt_toolkit.key_binding import KeyBindings
 import colorama
 import subprocess
 import socket
+import requests
+import filehash
+import json
 
 style = Style.from_dict({
     "yellow": "fg:yellow",
@@ -46,7 +49,7 @@ key = False
 
 LINE = "-" * 68
 
-
+# session = subprocess.Popen(["cmd.exe"], shell=True)
 
 def menu() -> str:
     global style
@@ -103,11 +106,20 @@ def menu() -> str:
     clear(); return result
 
 def run(cmd):
-    subprocess.run(["cmd.exe", "/c", f"@echo off && setlocal enabledelayedexpansion > nul && call .\\color.bat && set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ && set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; && {cmd} && endlocal"], shell=True)
+    subprocess.run(["cmd.exe", "/c", f'''
+                    @echo off &
+                    setlocal enabledelayedexpansion > nul &
+                    call .\\color.bat &
+                    set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ &
+                    set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; &
+                    @{cmd} &
+                    endlocal &
+                    '''.replace("\n", "").replace(20*" ", "")], shell=True)
+
 
 def appset():
     global style
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="应用管理菜单",
@@ -138,7 +150,7 @@ def appset():
     appset()
 
 def control():
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="连接与调试菜单",
@@ -172,7 +184,7 @@ def control():
 
 def flash():
     global style
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="刷机与文件菜单",
@@ -224,7 +236,7 @@ def flash():
 def xtcservice():
 
     global style
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="小天才服务菜单",
@@ -250,7 +262,7 @@ def xtcservice():
 
 def debug():
     global style
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="DEBUG菜单",
@@ -282,14 +294,14 @@ def debug():
     debug()
 
 def sel():
-    run("cls")
+    clear()
     run("call sel file s .")
     run("pause")
     run("call sel file m .")
     run("pause")
 
 def color():
-    run("cls")
+    clear()
     print_formatted_text(HTML(info +"<black>BLACK</black>"), style=style)
     print_formatted_text(HTML(info +"<red>RED</red>"), style=style)
     print_formatted_text(HTML(info +"<green>GREEN</green>"), style=style)
@@ -301,7 +313,7 @@ def color():
     run("pause")
 
 def help_menu():
-    run("cls")
+    clear()
     run("call logo")
     result = choice(
         message="帮助与链接",
@@ -391,7 +403,7 @@ def run_mod_main(modname):
     run(f'cd /d mod\\{modname} && call main.bat')
 
 def mod():
-    run("cls")
+    clear()
     run("call logo")
 
     result = choice(
@@ -515,6 +527,25 @@ def pre_main() -> bool:
             print_formatted_text(HTML(warn + "当前路径包含空格，可能导致未知问题，建议将工具箱放置在无空格路径下运行"), style=style)
     print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
     run("set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\")
+    if not os.path.exists("bugversion.txt"): 
+        bv = open("bugversion.txt", "w")
+        bv.write("0")
+        bv.close()
+    with open("bugversion.txt", "r") as fv:
+        vcf = open("version.txt")
+        vc = vcf.read().strip()
+        vcf.close()
+        webv = requests.get(f"https://atb.xgj.qzz.io/other/bugup/{vc}/manifest.json")
+        webv = webv.json()["latestBugUpdate"]["ver"]
+        filev = int(fv.read().strip())
+        if webv > filev:
+            print_formatted_text(HTML(warn+"当前补丁版本过时，必须更新"), style=style)
+            print_formatted_text(HTML(info+"按任意键开始更新..."), style=style)
+            pause()
+            shutil.copy2("repair.exe", "..\\repair.exe")
+            os.chdir("..\\")
+            subprocess.run(["cmd", "/c", "start", "repair.exe"])
+            return 2
     print_formatted_text(HTML(info + "检查系统变量[PATHEXT]..."), style=style)
     run("set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;")
     set_title("XTC AllToolBox by xgj_236")
@@ -526,6 +557,7 @@ def pre_main() -> bool:
                 run(f'cd /d mod\\{item} && call start.bat')
 
     os.chdir("..\\bin")
+    # tip: 已停止对WMIC的支持
     # wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
     # if wmic.returncode != 0:
@@ -540,6 +572,8 @@ def pre_main() -> bool:
         
     run("call withone")
     run("call afterup")
+    if os.path.exists("..\\bugjump.7z"): os.remove("..\\bugjump.7z")
+    if os.path.exists("..\\repair.exe"): os.remove("..\\repair.exe")
     if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
         print_formatted_text(HTML(info + "正在检查更新..."), style=style)
         run("call upall.bat run")

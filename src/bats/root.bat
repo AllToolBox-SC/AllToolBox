@@ -1,6 +1,6 @@
 @echo off
-call .\color
-setlocal enabledelayedexpansion
+@REM call .\color
+@REM setlocal enabledelayedexpansion
 
 :roottmp
 CLS

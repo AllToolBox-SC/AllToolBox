@@ -7,7 +7,10 @@ import requests
 import venv
 import py7zr
 import shutil
+import argparse
 from tqdm import tqdm
+
+
 
 def download_dependency():
     url = ""
@@ -69,6 +72,7 @@ def main():
         os.makedirs(os.getenv("LOCALAPPDATA") + r"\Nuitka\Nuitka\Cache\downloads\gcc\x86_64\14.2.0posix-19.1.1-12.0.0-msvcrt-r2\mingw64", exist_ok=True)
         os.symlink(gcc, os.getenv("LOCALAPPDATA") + r"\Nuitka\Nuitka\Cache\downloads\gcc\x86_64\14.2.0posix-19.1.1-12.0.0-msvcrt-r2\mingw64\bin")
     subprocess.run([os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka", "--onefile", "--lto=yes",  "--output-dir=./build/py/dist", "src/run_cmd.py", "--mingw64"])
+    subprocess.run([os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka", "--onefile", "--lto=yes",  "--output-dir=./build/py/dist", "src/repair.py", "--mingw64"])
     subprocess.run([os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka", "--onefile", "--lto=yes", "--output-dir=./build/py/dist", "src/start.py", "--mingw64"])
     subprocess.run(["cargo", "build", "--release", "--target-dir", "./build/rust"], shell=True)
     with py7zr.SevenZipFile('bin.7z', mode='r') as z:
@@ -86,11 +90,14 @@ def main():
             shutil.copy2(src_path, dst_path)
     shutil.copy2("./build/py/dist/run_cmd.exe", "./build/main/bin/run_cmd.exe")
     shutil.copy2("./build/py/dist/start.exe", "./build/main/bin/main.exe")
+    shutil.copy2("./build/py/dist/repair.exe", "./build/main/bin/repair.exe")
     shutil.copy2("./build/rust/release/jsonutil.exe", "./build/main/bin/jsonutil.exe")
     shutil.copy2("./build/rust/release/lolcat.exe", "./build/main/bin/lolcat.exe")
+    
     print("Build completed.")
 
     return 0
 
 if __name__ == "__main__":
+    # parser = argparse.ArgumentParser(description="Build ATB.")
     sys.exit(main())
