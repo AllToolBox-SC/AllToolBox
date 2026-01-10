@@ -70,6 +70,19 @@ def set_env_variable(name, value, user=True):
     winreg.SetValueEx(registry_key, name, 0, winreg.REG_SZ, value)
     winreg.CloseKey(registry_key)
 
+
+def get_env_variable(name, user=True) -> Optional[str]:
+    """Read environment variable directly from registry to avoid stale process env."""
+    root = winreg.HKEY_CURRENT_USER if user else winreg.HKEY_LOCAL_MACHINE
+    path = r'Environment'
+    try:
+        registry_key = winreg.OpenKey(root, path, 0, winreg.KEY_READ)
+        value, _ = winreg.QueryValueEx(registry_key, name)
+        winreg.CloseKey(registry_key)
+        return value
+    except FileNotFoundError:
+        return None
+
 def menu() -> str:
     global style
     if os.path.exists("mod") and os.path.isdir("mod"):
@@ -549,37 +562,63 @@ def pre_main() -> bool:
     else:
         this_path = os.path.dirname(os.path.abspath(__file__))
 
-    atb_path = os.getenv("ATB_PATH")
-    path_v = os.getenv("PATH")
+    def clean_env_value(val: Optional[str]) -> Optional[str]:
+        if not val:
+            return val
+        return val.strip().strip('"')
+
+    atb_path_env = clean_env_value(os.getenv("ATB_PATH"))
+    atb_path_reg = clean_env_value(get_env_variable("ATB_PATH"))
+    atb_path = atb_path_env or atb_path_reg
+    path_v = os.getenv("PATH") or ""
+    path_updated = False
+
+    def norm_path(p: str) -> str:
+        return os.path.normcase(os.path.normpath(p.rstrip("\\/")))
 
     if not atb_path:
         with open("whoyou.txt", "w", encoding="utf-8") as f:
             f.write("1")
 
-    path_parts = [p.strip().rstrip("\\") for p in path_v.split(";") if p.strip()]
+    path_parts = [p.strip() for p in path_v.split(";") if p.strip()]
+    this_norm = norm_path(this_path)
+    atb_norm = norm_path(atb_path) if atb_path else None
 
-    if not atb_path or atb_path != this_path:
-        # this_path_norm = this_path.rstrip("\\")
-        # if atb_path:
-        #     path_parts = [this_path_norm if p.lower() == atb_path.lower().rstrip("\\") else p for p in path_parts]
-        # else:
-        #     if all(p.lower() != this_path_norm.lower() for p in path_parts):
-        #         path_parts.insert(0, this_path_norm)
+    # Normalize PATH: drop old ATB entry, remove dupes, ensure current path is present
+    cleaned_parts = []
+    seen = set()
+    for p in path_parts:
+        norm = norm_path(p)
+        if atb_norm and norm == atb_norm and this_norm != atb_norm:
+            continue
+        if norm in seen:
+            continue
+        seen.add(norm)
+        cleaned_parts.append(os.path.normpath(p))
 
-        # new_path = ";".join(path_parts)
+    if this_norm not in seen:
+        cleaned_parts.insert(0, os.path.normpath(this_path))
+        seen.add(this_norm)
 
-        # set_env_variable("PATH", new_path)
-        
-        os.system(r"powershell [Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';' + (Get-Location).Path, 'User')")
+    new_path = ";".join(cleaned_parts)
+    current_norm_join = ";".join(os.path.normpath(p) for p in path_parts)
+
+    if new_path != current_norm_join:
+        set_env_variable("PATH", new_path)
+        path_updated = True
+
+    if not atb_path or atb_norm != this_norm:
+        set_env_variable("ATB_PATH", this_path)
+        os.environ["ATB_PATH"] = this_path  # keep current process in sync
         run("call refreshenv 1>nul 2>nul")
-        run(f'setx ATB_PATH {this_path} 1>nul 2>nul')
-
-
-
+        with open("whoyou.txt", "w", encoding="utf-8") as f:
+            f.write("2")
     else:
         with open("whoyou.txt", "w", encoding="utf-8") as f:
             f.write("2")
-    run("call refreshenv 1>nul 2>nul")
+
+    if path_updated:
+        run("call refreshenv 1>nul 2>nul")
     print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
     run("set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\")
     
