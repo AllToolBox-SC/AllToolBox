@@ -541,7 +541,7 @@ def pre_main() -> bool:
                 path_v += ";"
             path_v += this_path
 
-        run(f'setx PATH "{path_v}"')
+        run(f'setx PATH ^"{path_v}^"')
         run(f'setx ATB_PATH "{this_path}"')
 
     else:
