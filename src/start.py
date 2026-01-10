@@ -23,6 +23,9 @@ import socket
 import requests
 import filehash
 import json
+import winreg
+
+
 
 style = Style.from_dict({
     "yellow": "fg:yellow",
@@ -50,6 +53,22 @@ key = False
 LINE = "-" * 68
 
 # session = subprocess.Popen(["cmd.exe"], shell=True)
+
+def set_env_variable(name, value, user=True):
+    """
+    设置环境变量（用户或系统）
+    user=True 设置到当前用户
+    user=False 设置到系统（需要管理员权限）
+    """
+    root = winreg.HKEY_CURRENT_USER if user else winreg.HKEY_LOCAL_MACHINE
+    path = r'Environment'
+    try:
+        registry_key = winreg.OpenKey(root, path, 0, winreg.KEY_SET_VALUE)
+    except FileNotFoundError:
+        registry_key = winreg.CreateKey(root, path)
+
+    winreg.SetValueEx(registry_key, name, 0, winreg.REG_SZ, value)
+    winreg.CloseKey(registry_key)
 
 def menu() -> str:
     global style
@@ -106,11 +125,11 @@ def menu() -> str:
     clear(); return result
 
 def run(cmd):
-    subprocess.run(["cmd.exe", "/c", f'''
+    subprocess.run(["cmd.exe", "/v:on", "/c", f'''
                     @echo off &
                     setlocal enabledelayedexpansion 1>nul 2>nul &
                     call .\\color.bat &
-                    set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ &
+                    set PATH=%cd%\\;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%PATH% &
                     set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; &
                     @{cmd} &
                     endlocal 1>nul 2>nul &
@@ -525,24 +544,37 @@ def pre_main() -> bool:
             return False
         else:
             print_formatted_text(HTML(warn + "当前路径包含空格，可能导致未知问题，建议将工具箱放置在无空格路径下运行"), style=style)
-    this_path = os.path.dirname(os.path.abspath(__file__))
+    if getattr(sys, 'frozen', False):
+        this_path = os.path.dirname(sys.executable)
+    else:
+        this_path = os.path.dirname(os.path.abspath(__file__))
 
     atb_path = os.getenv("ATB_PATH")
-    path_v = os.getenv("PATH", "")
+    path_v = os.getenv("PATH")
 
     if not atb_path:
         with open("whoyou.txt", "w", encoding="utf-8") as f:
             f.write("1")
 
-        if atb_path and atb_path in path_v:
-            path_v = path_v.replace(atb_path, this_path)
-        else:
-            if not path_v.endswith(";"):
-                path_v += ";"
-            path_v += this_path
+    path_parts = [p.strip().rstrip("\\") for p in path_v.split(";") if p.strip()]
 
-        run(f'setx PATH ^"{path_v}^"')
-        run(f'setx ATB_PATH "{this_path}"')
+    if not atb_path or atb_path != this_path:
+        # this_path_norm = this_path.rstrip("\\")
+        # if atb_path:
+        #     path_parts = [this_path_norm if p.lower() == atb_path.lower().rstrip("\\") else p for p in path_parts]
+        # else:
+        #     if all(p.lower() != this_path_norm.lower() for p in path_parts):
+        #         path_parts.insert(0, this_path_norm)
+
+        # new_path = ";".join(path_parts)
+
+        # set_env_variable("PATH", new_path)
+        
+        os.system(r"powershell [Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';' + (Get-Location).Path, 'User')")
+        run("call refreshenv 1>nul 2>nul")
+        run(f'setx ATB_PATH {this_path} 1>nul 2>nul')
+
+
 
     else:
         with open("whoyou.txt", "w", encoding="utf-8") as f:
@@ -550,28 +582,7 @@ def pre_main() -> bool:
     run("call refreshenv 1>nul 2>nul")
     print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
     run("set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\")
-    try:
-        if not os.path.exists("bugversion.txt"): 
-            bv = open("bugversion.txt", "w")
-            bv.write("0")
-            bv.close()
-        with open("bugversion.txt", "r") as fv:
-            vcf = open("version.txt")
-            vc = vcf.read().strip()
-            vcf.close()
-            webv = requests.get(f"https://atb.xgj.qzz.io/other/bugup/{vc}/manifest.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'})
-            webv = webv.json()["latestBugUpdate"]["ver"]
-            filev = int(fv.read().strip())
-            if webv > filev:
-                print_formatted_text(HTML(warn+"当前补丁版本过时，必须更新"), style=style)
-                print_formatted_text(HTML(info+"按任意键开始更新..."), style=style)
-                pause()
-                shutil.copy2("repair.exe", "..\\repair.exe")
-                os.chdir("..\\")
-                subprocess.run(["cmd", "/c", "start", "repair.exe"])
-                cleanup(2)
-    except Exception as e:
-        print_formatted_text(HTML(warn + f"漏洞补丁获取失败，错误信息：{str(e)}"))
+    
     print_formatted_text(HTML(info + "检查系统变量[PATHEXT]..."), style=style)
     run("set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;")
     set_title("XTC AllToolBox by xgj_236")
@@ -602,6 +613,28 @@ def pre_main() -> bool:
     if os.path.exists("..\\repair.exe"): os.remove("..\\repair.exe")
     if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
         print_formatted_text(HTML(info + "正在检查更新..."), style=style)
+        try:
+            if not os.path.exists("bugversion.txt"): 
+                bv = open("bugversion.txt", "w")
+                bv.write("0")
+                bv.close()
+            with open("bugversion.txt", "r") as fv:
+                vcf = open("version.txt")
+                vc = vcf.read().strip()
+                vcf.close()
+                webv = requests.get(f"https://atb.xgj.qzz.io/other/bugup/{vc}/manifest.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'})
+                webv = webv.json()["latestBugUpdate"]["ver"]
+                filev = int(fv.read().strip())
+                if webv > filev:
+                    print_formatted_text(HTML(warn+"当前补丁版本过时，必须更新"), style=style)
+                    print_formatted_text(HTML(info+"按任意键开始更新..."), style=style)
+                    pause()
+                    shutil.copy2("repair.exe", "..\\repair.exe")
+                    os.chdir("..\\")
+                    subprocess.run(["cmd", "/c", "start", "repair.exe"])
+                    cleanup(2)
+        except Exception as e:
+            print_formatted_text(HTML(warn + f"漏洞补丁获取失败，错误信息：{str(e)}"))
         run("call upall.bat run")
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)

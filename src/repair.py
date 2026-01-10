@@ -12,7 +12,7 @@ def main():
         vcf = open(".\\bin\\version.txt")
         vc = vcf.read().strip()
         vcf.close()
-        webv = requests.get(f"https://atb.xgj.qzz.io/other/bugup/{vc}/manifest.json")
+        webv = requests.get(f"https://atb.xgj.qzz.io/other/bugup/{vc}/manifest.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'})
         webvc = webv.json()["latestBugUpdate"]["ver"]
         filev = int(fv.read().strip())
         if webvc > filev:

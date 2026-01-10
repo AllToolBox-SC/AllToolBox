@@ -70,6 +70,7 @@ void ElevatePrivileges()
 
 void RunMainBat()
 {
+    printf("\033[94m[信息]\033[97m正在启动中...\033[0m\n");
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     SetCurrentDirectory(L".\\bin\\");
