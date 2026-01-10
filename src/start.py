@@ -5,18 +5,22 @@ import sys
 import shutil
 import platform
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Iterable, List
 from prompt_toolkit import (
-    choice, 
     print_formatted_text, 
     ANSI, 
     HTML, 
     prompt,
     PromptSession
 )
-from prompt_toolkit.styles import Style
+from prompt_toolkit.styles import Style, merge_styles
 from prompt_toolkit.shortcuts import clear, set_title
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.widgets import RadioList
+from prompt_toolkit.mouse_events import MouseEventType, MouseButton
 import colorama
 import subprocess
 import socket
@@ -53,6 +57,122 @@ key = False
 LINE = "-" * 68
 
 # session = subprocess.Popen(["cmd.exe"], shell=True)
+
+Option = Tuple[str, str]
+
+
+def menu_choice(
+    message: str,
+    options: Iterable[Option],
+    default: str | None = None,
+    style_override: Style | None = None,
+    extra_bindings: KeyBindings | None = None,
+):
+    option_list: List[Option] = list(options)
+    if not option_list:
+        raise ValueError("menu_choice requires at least one option")
+
+    display_options = [
+        (value, f"{i + 1}. {label}")
+        for i, (value, label) in enumerate(option_list)
+    ]
+
+    radio = RadioList(
+        display_options,
+        show_numbers=False,
+        open_character=" ",
+        select_character=" ",
+        close_character=" ",
+    )
+
+    if default is not None:
+        for idx, (value, _) in enumerate(option_list):
+            if value == default:
+                radio._selected_index = idx
+                break
+
+    if radio._selected_index is None:
+        radio._selected_index = 0
+
+    kb = KeyBindings()
+
+    @kb.add("enter", eager=True)
+    @kb.add(" ", eager=True)
+    def _(event):
+        idx = radio._selected_index or 0
+        event.app.exit(result=option_list[idx][0])
+
+    digit_buf = {"text": "", "t": 0.0}
+
+    def _select_by_number(event, digit: str) -> None:
+        now = time.monotonic()
+        if now - digit_buf["t"] > 0.2:
+            digit_buf["text"] = ""
+        digit_buf["text"] += digit
+        digit_buf["t"] = now
+        try:
+            idx = int(digit_buf["text"]) - 1
+        except ValueError:
+            return
+        if 0 <= idx < len(option_list):
+            radio._selected_index = idx
+            event.app.invalidate()
+
+    for d in "0123456789":
+        @kb.add(d, eager=True)
+        def _(event, _d=d):
+            _select_by_number(event, _d)
+
+    orig_mouse_handler = radio.control.mouse_handler
+    last_click = {"idx": None, "t": 0.0}
+
+    def mouse_handler(mouse_event):
+        if orig_mouse_handler:
+            orig_mouse_handler(mouse_event)
+            get_app().invalidate()
+
+        if mouse_event.event_type == MouseEventType.MOUSE_UP and mouse_event.button == MouseButton.LEFT:
+            now = time.monotonic()
+            idx = radio._selected_index
+            if idx == last_click["idx"] and (now - last_click["t"]) <= 0.5:
+                sel = idx or 0
+                value = radio.current_value or option_list[sel][0]
+                get_app().exit(result=value)
+            last_click["idx"] = idx
+            last_click["t"] = now
+
+    radio.control.mouse_handler = mouse_handler
+
+    radio_style = Style.from_dict(
+        {
+            "radio-list": "",
+            "radio": "fg:white",
+            "radio-selected": "fg:black bg:ansiyellow bold",
+            "radio-checked": "fg:green",
+            "radio-number": "fg:cyan",
+        }
+    )
+
+    app_style = merge_styles([style_override, radio_style]) if style_override else radio_style
+
+    kb_final = merge_key_bindings([kb, extra_bindings]) if extra_bindings else kb
+
+    app = Application(
+        layout=Layout(radio, focused_element=radio),
+        key_bindings=kb_final,
+        mouse_support=True,
+        full_screen=False,
+        style=app_style,
+    )
+    result = app.run()
+    if result is None:
+        sel = radio._selected_index or 0
+        result = option_list[sel][0]
+    return result
+
+
+def choose(message: str, options: Iterable[Option], default: str | None = None, extra_bindings: KeyBindings | None = None):
+    return menu_choice(message=message, options=options, default=default, style_override=style, extra_bindings=extra_bindings)
 
 def set_env_variable(name, value, user=True):
     """
@@ -114,7 +234,7 @@ def menu() -> str:
     #     }
     # )
     
-    result = choice(
+    result = choose(
         message="",
         options=[
             ("onekeyroot", "一键Root"),
@@ -130,9 +250,7 @@ def menu() -> str:
             ("exit", "退出脚本")
         ],
         default="onekeyroot",
-        style=style,
-        key_bindings=kb,
-        mouse_support=True
+        extra_bindings=kb
     )
 
     clear(); return result
@@ -153,7 +271,7 @@ def appset():
     global style
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="应用管理菜单",
         #text="请选择",
         options=[
@@ -164,8 +282,7 @@ def appset():
             ("4", "设置微信QQ为开机自启应用"),
             ("5", "解除z10安装限制"),
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
     if result == "A":
         clear(); return
@@ -184,7 +301,7 @@ def appset():
 def control():
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="连接与调试菜单",
         #text="请选择",
         options=[
@@ -196,7 +313,7 @@ def control():
             ("5", "型号与innermodel对照表"),
             ("6", "高级重启"),
         ],
-        mouse_support=True
+        default="A"
     )
     if result == "A":
         clear(); return
@@ -218,7 +335,7 @@ def flash():
     global style
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="刷机与文件菜单",
         #text="请选择",
         options=[
@@ -234,8 +351,7 @@ def flash():
             ("9", "备份与恢复"),
             ("10", "安卓8.1root后优化")
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
     match result:
         case "A":
@@ -270,7 +386,7 @@ def xtcservice():
     global style
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="小天才服务菜单",
         #text="请选择",
         options=[
@@ -279,8 +395,7 @@ def xtcservice():
             ("2", "ADB/自检校验码计算"),
             ("3", "离线OTA升级"),
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
     if result == "A":
         clear(); return
@@ -296,7 +411,7 @@ def debug():
     global style
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="DEBUG菜单",
         #text="请选择",
         options=[
@@ -307,8 +422,7 @@ def debug():
             ("4", "调整为更新状态"),
             ("5", "debug sel"),
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
     match result:
         case "A":
@@ -347,7 +461,7 @@ def color():
 def help_menu():
     clear()
     run("call logo")
-    result = choice(
+    result = choose(
         message="帮助与链接",
         #text="请选择",
         options=[
@@ -361,8 +475,7 @@ def help_menu():
             ("7", "开发文档"),
             ("8", "123云盘解除下载限制")
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
     match result:
         case "A":
@@ -418,11 +531,10 @@ def load_mod_menu():
         mapping[key] = name
         options.append((key, name))
 
-    result = choice(
+    result = choose(
         message="已加载扩展",
         options=options,
-        style=style,
-        mouse_support=True
+        default="A"
     )
 
     if result == "A":
@@ -438,7 +550,7 @@ def mod():
     clear()
     run("call logo")
 
-    result = choice(
+    result = choose(
         message="扩展管理",
         options=[
             ("A", "返回上级菜单"),
@@ -446,8 +558,7 @@ def mod():
             ("2", "安装扩展"),
             ("3", "卸载扩展"),
         ],
-        style=style,
-        mouse_support=True
+        default="A"
     )
 
     if result == "A":
