@@ -23,7 +23,7 @@ BOOL IsRunAsAdmin()
 
 void Message()
 {
-    MessageBox(NULL, (LPCWSTR)L"璇蜂互绠＄悊鍛樿韩浠借繍琛岋紒", (LPCWSTR)L"鎺堟潈澶辫触", MB_OK | MB_ICONERROR);
+    MessageBox(NULL, (LPCWSTR)L"请以管理员身份运行！", (LPCWSTR)L"授权失败", MB_OK | MB_ICONERROR);
 }
 
 void ElevatePrivileges()
@@ -92,7 +92,7 @@ int wmain()
         ElevatePrivileges();
     }
 #if DEBUG
-    printf("[INFO] 绋嬪簭鎻愭潈鎴愬姛");
+    printf("[INFO] 程序提权成功");
 #endif
     RunMainBat();
 
