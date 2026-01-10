@@ -1,85 +1,45 @@
-# -*- coding: utf-8 -*-
+"""入口脚本，仅保留菜单相关逻辑，其余功能拆分到独立模块。"""
 
 import os
-import sys
-import shutil
-import platform
-import time
-from typing import Optional, Tuple
-from prompt_toolkit import (
-    choice, 
-    print_formatted_text, 
-    ANSI, 
-    HTML, 
-    prompt,
-    PromptSession
-)
-from prompt_toolkit.styles import Style
-from prompt_toolkit.shortcuts import clear, set_title
-from prompt_toolkit.key_binding import KeyBindings
-import colorama
 import subprocess
-import socket
 
-style = Style.from_dict({
-    "yellow": "fg:yellow",
-    "red": "fg:red",
-    "orange": "fg:orange",
-    "info": "fg:#3B78FF",
-    "black": "fg:black",
-    "cyan": "fg:cyan",
-    "green": "fg:green",
-    "blue": "fg:blue",
-    "magenta": "fg:magenta",
-    "white": "fg:white",
-    "reset": "",
-    "number": "bold",
-    "selected-option": "underline bold",
-})
+import colorama
+from prompt_toolkit import ANSI, HTML, print_formatted_text
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts import clear
 
-info = "<info>[信息]</info>"
-error = "<red>[错误]</red>"
-warn = "<orange>[警告]</orange>"
+from command_runner import run
+from config import INFO, WARN, style
+from menu_choice import menu_choice
+from menus import about, appset, control, debug, flash, help_menu, mod, xtcservice
+from startup import cleanup, pre_main
 
-flag = False
-key = False
-
-LINE = "-" * 68
-
+initialized = False
+key_interrupted = False
 
 
 def menu() -> str:
-    global style
     if os.path.exists("mod") and os.path.isdir("mod"):
-        print_formatted_text(HTML(info + "已加载扩展列表："), style=style) if len(os.listdir("mod")) != 0 else print_formatted_text(HTML(info + "已加载扩展列表：未加载任何扩展"), style=style)
         if len(os.listdir("mod")) != 0:
-            i: int = 1
-            for item in os.listdir("mod"):
-                print_formatted_text(f"{i}. {item}", style=style)
-                i += 1
+            print_formatted_text(HTML(INFO + "已加载扩展列表："), style=style)
+            for idx, item in enumerate(os.listdir("mod"), start=1):
+                print_formatted_text(f"{idx}. {item}", style=style)
+        else:
+            print_formatted_text(HTML(INFO + "已加载扩展列表：未加载任何扩展"), style=style)
     else:
-        print_formatted_text(HTML(warn + "扩展文件夹没有创建，正在创建..."), style=style)
-        os.remove("mod") if os.path.isfile("mod") else ...
+        print_formatted_text(HTML(WARN + "扩展文件夹没有创建，正在创建..."), style=style)
+        os.remove("mod") if os.path.isfile("mod") else None
         os.makedirs("mod", exist_ok=True)
+
     kb = KeyBindings()
-    # @kb.add('R')
-    # def _(event):
-    #     event.app.exit(result="SHIFT_R")
-    
+
     @kb.add('D')
     def _(event):
         event.app.exit(result="SHIFT_D")
 
-
     print_formatted_text(ANSI(colorama.Fore.RESET + colorama.Fore.YELLOW + "XTC AllToolBox 控制台&主菜单 " + colorama.Fore.BLUE + "by xgj_236" + colorama.Fore.LIGHTYELLOW_EX))
-    # style = Style.from_dict(
-    #     {
-    #         "number": "bold",
-    #         "selected-option": "underline bold",
-    #     }
-    # )
-    
-    result = choice(
+
+    result = menu_choice(
         message="",
         options=[
             ("onekeyroot", "一键Root"),
@@ -92,580 +52,66 @@ def menu() -> str:
             ("man-apps", "应用管理[子菜单]"),
             ("imoo-services", "小天才服务[子菜单]"),
             ("help-links", "帮助与链接[子菜单]"),
-            ("exit", "退出脚本")
+            ("exit", "退出脚本"),
         ],
         default="onekeyroot",
-        style=style,
-        key_bindings=kb,
-        mouse_support=True
     )
 
-    clear(); return result
-
-def run(cmd):
-    subprocess.run(["cmd.exe", "/c", f"@echo off && setlocal enabledelayedexpansion > nul && call .\\color.bat && set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\ && set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; && {cmd} && endlocal"], shell=True)
-
-def appset():
-    global style
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="应用管理菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "安装应用"),
-            ("2", "卸载应用"),
-            ("3", "安装xtc状态栏"),
-            ("4", "设置微信QQ为开机自启应用"),
-            ("5", "解除z10安装限制"),
-        ],
-        style=style,
-        mouse_support=True
-    )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        run("call userinstapp")
-    if result == "2":
-        run("call unapp")
-    if result == "3":
-        run("call xtcztl")
-    if result == "4":
-        run("call qqwxautestart")
-    if result == "5":
-        run("call z10openinst")
-    appset()
-
-def control():
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="连接与调试菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "进入qmmi[9008]"),
-            ("2", "scrcpy投屏"),
-            ("3", "手表信息"),
-            ("4", "打开充电可用"),
-            ("5", "型号与innermodel对照表"),
-            ("6", "高级重启"),
-        ],
-        mouse_support=True
-    )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        run("call qmmi")
-    if result == "2":
-        run("start scrcpy-noconsole.vbs")
-    if result == "3":
-        run("call listbuild")
-    if result == "4":
-        run("call opencharge")
-    if result == "5":
-        run("call innermodel")
-    if result == "6":
-        run("call rebootpro")
-    control()
-
-def flash():
-    global style
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="刷机与文件菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "从云端更新文件"),
-            ("2", "导入本地root文件"),
-            ("3", "一键root[不刷userdata]"),
-            ("4", "恢复出厂设置"),
-            ("5", "开机自刷Recovery"),
-            ("6", "刷入TWRP"),
-            ("7", "刷入XTC Patch"),
-            ("8", "刷入Magisk模块"),
-            ("9", "备份与恢复"),
-            ("10", "安卓8.1root后优化")
-        ],
-        style=style,
-        mouse_support=True
-    )
-    match result:
-        case "A":
-            clear(); return
-        case "1":
-            run("call cloud")
-        case "2":
-            run("call pashroot")
-        case "3":
-            run("call root nouserdata")
-        case "4":
-            run("call miscre")
-        case "5":
-            run("call pashtwrppro")
-        case "6":
-            run("call pashtwrp")
-        case "7":
-            run("call xtcpatch")
-        case "8":
-            run("call userinstmodule")
-        case "9":
-            run("call backup")
-        case "10":
-            run("call rootpro")
-        case _:
-            print_formatted_text(HTML(error + "输入错误，请重新输入"), style=style)
-        
-    flash()
-
-def xtcservice():
-
-    global style
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="小天才服务菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "手表强加好友[已弃用]"),
-            ("2", "ADB/自检校验码计算"),
-            ("3", "离线OTA升级"),
-        ],
-        style=style,
-        mouse_support=True
-    )
-    if result == "A":
-        clear(); return
-    if result == "1":
-        run("call friend")
-    if result == "2":
-        run('powershell -ExecutionPolicy Bypass -File ".\\zj.ps1"')
-    if result == "3":
-        run("call ota")
-    xtcservice()
-
-def debug():
-    global style
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="DEBUG菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "色卡"),
-            ("2", "调整为未使用状态"),
-            ("3", "调整为使用状态"),
-            ("4", "调整为更新状态"),
-            ("5", "debug sel"),
-        ],
-        style=style,
-        mouse_support=True
-    )
-    match result:
-        case "A":
-            clear(); return
-        case "1":
-            color()
-        case "2":
-            open("whoyou.txt", "w").write("1")
-        case "3":
-            open("whoyou.txt", "w").write("2")
-        case "4":
-            open("whoyou.txt", "w").write("3")
-        case "5":
-            sel()
-    debug()
-
-def sel():
-    run("cls")
-    run("call sel file s .")
-    run("pause")
-    run("call sel file m .")
-    run("pause")
-
-def color():
-    run("cls")
-    print_formatted_text(HTML(info +"<black>BLACK</black>"), style=style)
-    print_formatted_text(HTML(info +"<red>RED</red>"), style=style)
-    print_formatted_text(HTML(info +"<green>GREEN</green>"), style=style)
-    print_formatted_text(HTML(info +"<orange>ORANGE</orange>"), style=style)
-    print_formatted_text(HTML(info +"<blue>BLUE</blue>"), style=style)
-    print_formatted_text(HTML(info +"<magenta>MAGENTA</magenta>"), style=style)
-    print_formatted_text(HTML(info +"<cyan>CYAN</cyan>"), style=style)
-    print_formatted_text(HTML(info +"<white>WHITE</white>"), style=style)
-    run("pause")
-
-def help_menu():
-    run("cls")
-    run("call logo")
-    result = choice(
-        message="帮助与链接",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "远程协助"),
-            ("2", "超级恢复文件下载"),
-            ("3", "离线OTA下载"),
-            ("4", "面具模块下载"),
-            ("5", "APK下载"),
-            ("6", "工具箱官网"),
-            ("7", "开发文档"),
-            ("8", "123云盘解除下载限制")
-        ],
-        style=style,
-        mouse_support=True
-    )
-    match result:
-        case "A":
-            clear()
-            return
-        case "1":
-            print_formatted_text(HTML(warn + "已弃用该功能"))
-        case "2":
-            run("start https://www.123865.com/s/Q5JfTd-hEbWH")
-        case "3":
-            run("start https://www.123865.com/s/Q5JfTd-HEbWH")
-        case "4":
-            run("start https://www.123684.com/s/Q5JfTd-cEbWH")
-        case "5":
-            run("start https://www.123684.com/s/Q5JfTd-ZEbWH")
-        case "6":
-            run("start https://atb.xgj.qzz.io")
-        case "7":
-            with open("开发文档.txt", "r", encoding="utf-8") as f:
-                doc = f.read()
-                print_formatted_text(HTML(doc), style=style)
-            kb = KeyBindings()
-            prompt(
-                HTML(info + "按任意键返回上级菜单"),
-                key_bindings=kb,
-                style=style
-            )
-        case "8":
-            run("call patch123")
-        
-    help_menu()
-
-def load_mod_menu():
-    mod_dir = ".\\mod"
-    if not os.path.isdir(mod_dir):
-        print_formatted_text(HTML(error + "未找到 mod 目录"), style=style)
-        return None
-
-    dirs = [d for d in os.listdir(mod_dir)
-            if os.path.isdir(os.path.join(mod_dir, d))]
-
-    if not dirs:
-        print_formatted_text(HTML(warn + "未发现任何扩展"), style=style)
-        time.sleep(2)
-        return None
-
-    base = 10
-    mapping = {}
-    options = [("A", "返回上级菜单")]
-
-    for i, name in enumerate(dirs, start=base + 1):
-        key = str(i)
-        mapping[key] = name
-        options.append((key, name))
-
-    result = choice(
-        message="已加载扩展",
-        options=options,
-        style=style,
-        mouse_support=True
-    )
-
-    if result == "A":
-        return None
-
-    return mapping.get(result)
-
-
-def run_mod_main(modname):
-    run(f'cd /d mod\\{modname} && call main.bat')
-
-def mod():
-    run("cls")
-    run("call logo")
-
-    result = choice(
-        message="扩展管理",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "运行已安装扩展"),
-            ("2", "安装扩展"),
-            ("3", "卸载扩展"),
-        ],
-        style=style,
-        mouse_support=True
-    )
-
-    if result == "A":
-        clear(); return
-
-    if result == "1":
-        modname = load_mod_menu()
-        if modname:
-            run_mod_main(modname)
-
-    if result == "2":
-        run("call mod")
-
-    if result == "3":
-        run("call unmod")
-
-    mod()
-
-
-def about():
-    print_formatted_text(
-        HTML(f"<yellow>{LINE}</yellow>"),
-        style=style
-    )
-
-    print_formatted_text(
-        HTML(info + "本脚本由快乐小公爵236等开发者制作"),
-        style=style
-    )
-
-    run("call thank.bat")
-
-    print_formatted_text(
-        HTML(info + "工具官网：https://atb.xgj.qzz.io"),
-        style=style
-    )
-    print_formatted_text(
-        HTML(info + "作者QQ：3247039462"),
-        style=style
-    )
-    print_formatted_text(
-        HTML(info + "工具箱交流与反馈QQ群：907491503"),
-        style=style
-    )
-    print_formatted_text(
-        HTML(info + "作者哔哩哔哩账号：https://b23.tv/L54R5ZV"),
-        style=style
-    )
-    print_formatted_text(
-        HTML(info + "bug与建议反馈邮箱：ATBbug@xgj.qzz.io"),
-        style=style
-    )
-
-    run("call uplog.bat")
-
-    print_formatted_text(
-        HTML(f"<yellow>{LINE}</yellow>"),
-        style=style
-    )
-
-    kb = KeyBindings()
-
-
-    prompt(
-        HTML(info + "按任意键返回上级菜单"),
-        key_bindings=kb,
-        style=style
-    )
-
-def checkwin() -> Tuple[str, str, str, str]:
-    return (
-        platform.system(),
-        platform.release(),
-        platform.version(),
-        platform.architecture()
-    )
-
-
-def pause():
-    kb = KeyBindings()
-
-    @kb.add('<any>')
-    def _(event):
-        global pressed_key
-        pressed_key = event.key_sequence[0].key
-        event.app.exit()
-    
-    PromptSession(key_bindings=kb).prompt("")
-
-
-def pre_main() -> bool:
-    global flag
-    run("@echo off")
-    run("setlocal enabledelayedexpansion")
-    if os.getenv("ATB_OLD_MENU", "0") == "1":
-        run("call start.bat")
-        sys.exit()
-    # subprocess.run(["chcp", "65001"], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print_formatted_text(HTML(info + "正在启动中..."), style=style)
-    colorama.init(autoreset=True)
-    run("call .\\color.bat")
-    if " " in os.path.abspath("."):
-        if os.getenv("ATB_IGNORE_SPACE_IN_PATH", "0") != "1":
-            print_formatted_text(HTML(error + "当前路径包含空格，会导致未知问题，请将工具箱放置在无空格路径下运行，即将退出..."), style=style)
-            print_formatted_text(HTML(info + "若要跳过此检测，请设置环境变量ATB_IGNORE_SPACE_IN_PATH=1"), style=style)
-            time.sleep(2)
-            return False
-        else:
-            print_formatted_text(HTML(warn + "当前路径包含空格，可能导致未知问题，建议将工具箱放置在无空格路径下运行"), style=style)
-    print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
-    run("set PATH=%PATH%;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;%cd%\\")
-    print_formatted_text(HTML(info + "检查系统变量[PATHEXT]..."), style=style)
-    run("set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;")
-    set_title("XTC AllToolBox by xgj_236")
-    os.makedirs("mod", exist_ok=True)
-    for item in os.listdir("mod"):
-        item_path = os.path.join("mod", item)
-        if os.path.isdir(item_path):
-            if os.path.exists(os.path.join(item_path, "start.bat")):
-                run(f'cd /d mod\\{item} && call start.bat')
-
-    os.chdir("..\\bin")
-    # wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
-
-    # if wmic.returncode != 0:
-    #     r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
-    #     if r.lower() == "y":
-    #         print_formatted_text(HTML(info + "坐和放宽，把时间交给我们..."), style=style)
-    #         print_formatted_text(HTML(info + "若提示是否重启，建议选择重启"), style=style)
-    #         run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
-    #         run("call refreshenv")
-    #     else:
-    #         print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
-        
-    run("call withone")
-    run("call afterup")
-    if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
-        print_formatted_text(HTML(info + "正在检查更新..."), style=style)
-        run("call upall.bat run")
-    if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
-        print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
-        # run("call checkwin")
-        os_name, os_release, os_version, arch = checkwin()
-        match arch[0]:
-            case "64bit": arch = "x64"
-            case "32bit": arch = "x86"
-            case _: arch = "arm64-v8a"
-        print_formatted_text(HTML(info + f"当前运行环境:{os_name}{os_release}_{arch}_{os_version}"), style=style)
-        os_vercode = 0
-        try:
-            os_vercode = float(os_release)
-        except ValueError:
-            pass
-        if os_vercode <= 7:
-            print_formatted_text(HTML(error + "此脚本需要 Windows 8 或更高版本"), style=style)
-            pause(); return 1
-        print_formatted_text(HTML(info + f"当前系统: {os_name} {os_release}"), style=style)
-
-        # print_formatted_text(HTML(info + "Windows属性成功检测"), style=style)
-        adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
-        adb_process.wait()
-        if adb_process.returncode != 0:
-            print_formatted_text(HTML(error + "ADB检查失败，返回值：", str(adb_process.returncode)), style=style)
-            return False
-        print_formatted_text(HTML(info + "检查ADB命令成功"), style=style)
-    whoyou = open("whoyou.txt", "w", encoding="gbk")
-    whoyou.write("2")
-    whoyou.close()
-    print_formatted_text(HTML(f"""{warn}关于解绑：该工具不提供手表强制解绑服务，如您拾取他人的手表，请联系当地110公安机关归还失主。手表解绑属于非法行为，请归还失主。而不要尝试通过任何手段解除挂失锁
-        {warn}关于收费：这个工具是完全免费的，如果你付费购买了那么请退款
-        {warn}本脚本部分功能可能造成侵权问题，并可能受到法律追究，所以仅供个人使用，请勿用于商业用途
-        {info}---请永远相信我们能给你带来免费又好用的工具---
-        {info}关于官网：https://atb.xgj.qzz.io
-        {info}关于作者：本脚本由快乐小公爵236等作者制作
-        {info}作者QQ：3247039462
-        {info}工具箱交流与反馈QQ群：907491503
-        {info}作者哔哩哔哩账号：https://b23.tv/L54R5ZV
-        {info}bug与建议反馈邮箱：ATBbug@xgj.qzz.io""".replace(" " * 8, "")), style=style)
-    print_formatted_text(HTML(info + "按任意键进入主界面"), style=style)
-
-    pause()
-    flag = True
     clear()
-    return True
-
-def check_adb_server() -> Tuple[bool, Optional[Exception]: None]:
-    adb_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    adb_server.settimeout(0.25)
-    try:
-        adb_server.connect(("127.0.0.1", 5037))
-    except socket.timeout:
-        return False
-    except Exception as e:
-        return False, e
-    adb_server.close()
-    return True
-
-
-def cleanup(code: int = 0):
-    global style
-    print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
-    if check_adb_server():
-        subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
-        # TODO: 优化kill-server
-        # try:
-        #     adbd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #     adbd.settimeout(4)
-        #     adbd.connect(("127.0.0.1", 5037))
-        #     cmd = "kill"
-        #     length_hex = f"{len(cmd):04X}"
-        #     adbd.sendall((length_hex + cmd).encode("ascii"))
-        #     adbd.close()
-        # except socket.timeout, Exception:
-        #     pass
-
-
-    run("endlocal")
-    sys.exit(code)
+    return result
 
 
 def main() -> int:
-    # do
-    global flag
-    global key
-    global style
+    global initialized
+    global key_interrupted
     try:
         clear()
 
-        pre = pre_main() if not flag else True
-        if not pre: return 1
+        if not initialized:
+            pre_ready = pre_main()
+            if not pre_ready:
+                return 1
+            initialized = True
+
         run("call logo")
         result = menu()
         match result:
-            case "SHIFT_R":
-                run("call start.bat"); return 0
-            case "SHIFT_D": debug()
+            case "SHIFT_D":
+                debug()
             case "onekeyroot":
                 run("call root.bat")
             case "openshell":
                 subprocess.run(["cmd.exe", "/k"], shell=True)
             case "forceupdate":
-                run("start cmd /c upall.bat up"); return 0
-            case "about": about()
-            case "mods": mod()
-            case "flash-files": flash()
-            case "connection-debug": control()
-            case "man-apps": appset()
-            case "imoo-services": xtcservice()
-            case "help-links":  help_menu()
-            case "exit": return 0
-        return main() # loop
-    except KeyboardInterrupt:
-        if key: 
-            print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
-            return 0
-        else:
-            if not flag:
-                print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
+                run("start cmd /c upall.bat up")
                 return 0
-            key = True
-            clear()
-            return main()
+            case "about":
+                about()
+            case "mods":
+                mod()
+            case "flash-files":
+                flash()
+            case "connection-debug":
+                control()
+            case "man-apps":
+                appset()
+            case "imoo-services":
+                xtcservice()
+            case "help-links":
+                help_menu()
+            case "exit":
+                return 0
+        return main()
+    except KeyboardInterrupt:
+        if key_interrupted:
+            print_formatted_text(HTML("\n" + WARN + "检测到用户中断，正在退出..."), style=style)
+            return 0
+        if not initialized:
+            print_formatted_text(HTML("\n" + WARN + "检测到用户中断，正在退出..."), style=style)
+            return 0
+        key_interrupted = True
+        clear()
+        return main()
 
 
 if __name__ == "__main__":
