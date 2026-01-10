@@ -565,7 +565,7 @@ def pre_main() -> bool:
     def clean_env_value(val: Optional[str]) -> Optional[str]:
         if not val:
             return val
-        return val.strip().strip('"')
+        return val.strip().strip('"').strip().rstrip(';')
 
     atb_path_env = clean_env_value(os.getenv("ATB_PATH"))
     atb_path_reg = clean_env_value(get_env_variable("ATB_PATH"))
@@ -580,7 +580,9 @@ def pre_main() -> bool:
         with open("whoyou.txt", "w", encoding="utf-8") as f:
             f.write("1")
 
-    path_parts = [p.strip() for p in path_v.split(";") if p.strip()]
+    # Clean and drop empty entries from PATH for stable comparisons
+    path_parts = [clean_env_value(p.strip()) for p in path_v.split(";") if p.strip()]
+    path_parts = [p for p in path_parts if p]
     this_norm = norm_path(this_path)
     atb_norm = norm_path(atb_path) if atb_path else None
 
@@ -596,26 +598,28 @@ def pre_main() -> bool:
         seen.add(norm)
         cleaned_parts.append(os.path.normpath(p))
 
+    # Ensure current path is present exactly once
     if this_norm not in seen:
         cleaned_parts.insert(0, os.path.normpath(this_path))
         seen.add(this_norm)
 
     new_path = ";".join(cleaned_parts)
-    current_norm_join = ";".join(os.path.normpath(p) for p in path_parts)
+    normed_current = [norm_path(p) for p in path_parts]
+    normed_new = [norm_path(p) for p in cleaned_parts]
 
-    if new_path != current_norm_join:
+    # Only update PATH when normalized lists differ
+    if normed_new != normed_current:
         set_env_variable("PATH", new_path)
         path_updated = True
 
-    if not atb_path or atb_norm != this_norm:
+    atb_same = bool(atb_path) and (atb_norm == this_norm)
+    if not atb_same:
         set_env_variable("ATB_PATH", this_path)
         os.environ["ATB_PATH"] = this_path  # keep current process in sync
-        run("call refreshenv 1>nul 2>nul")
-        with open("whoyou.txt", "w", encoding="utf-8") as f:
-            f.write("2")
-    else:
-        with open("whoyou.txt", "w", encoding="utf-8") as f:
-            f.write("2")
+        path_updated = True  # trigger refresh once
+ #       print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)#Test do not remove
+    with open("whoyou.txt", "w", encoding="utf-8") as f:
+        f.write("2")
 
     if path_updated:
         run("call refreshenv 1>nul 2>nul")
