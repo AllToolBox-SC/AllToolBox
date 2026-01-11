@@ -32,20 +32,20 @@ import winreg
 
 
 style = Style.from_dict({
-    # Core palette with a darker, premium tone
-    "yellow": "fg:#d4af37",  # gold
-    "red": "fg:#ff6b6b",
-    "orange": "fg:#f2a154",
-    "info": "fg:#6bc4ff",
-    "black": "fg:#0f1115",
-    "cyan": "fg:#5fd9c1",
-    "green": "fg:#7cd992",
-    "blue": "fg:#7fa8ff",
-    "magenta": "fg:#d0a3ff",
-    "white": "fg:#f6f8fb",
+    # Dark base, subtle accents, minimal fill
+    "yellow": "fg:#f1c40f",
+    "red": "fg:#ff7b7b",
+    "orange": "fg:#f4a261",
+    "info": "fg:#9dcffb",
+    "black": "fg:#0c1118",
+    "cyan": "fg:#67e0c2",
+    "green": "fg:#7ad1a8",
+    "blue": "fg:#8ab4f8",
+    "magenta": "fg:#c7a0ff",
+    "white": "fg:#e6edf3",
     "reset": "",
     "number": "bold",
-    "selected-option": "fg:#0f1115 bg:#d4af37 bold",
+    "selected-option": "fg:#e6edf3 bold underline",
 })
 
 info = "<info>[信息]</info>"
@@ -147,10 +147,10 @@ def menu_choice(
     radio_style = Style.from_dict(
         {
             "radio-list": "",
-            "radio": "fg:#cfd4dc",
-            "radio-selected": "fg:#0f1115 bg:#d4af37 bold",
-            "radio-checked": "fg:#7cd992",
-            "radio-number": "fg:#6bc4ff",
+            "radio": "fg:#cbd6e2",
+            "radio-selected": "fg:#e6edf3 bold underline",
+            "radio-checked": "fg:#7ad1a8",
+            "radio-number": "fg:#9dcffb",
         }
     )
 
