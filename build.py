@@ -11,6 +11,58 @@ import argparse
 from tqdm import tqdm
 
 
+def find_upx_dir():
+    """Locate UPX executable directory, preferring explicit env then common paths."""
+    candidates = []
+
+    upx_in_path = shutil.which("upx") or shutil.which("upx.exe")
+    if upx_in_path:
+        candidates.append(os.path.dirname(upx_in_path))
+
+    env_upx = os.getenv("UPX_DIR") or os.getenv("UPXPATH")
+    if env_upx:
+        candidates.append(env_upx)
+
+    candidates += [
+        os.path.join(".", "upx"),
+        os.path.join(".", "tools", "upx"),
+        os.path.join(".", "bin"),
+    ]
+
+    for c in candidates:
+        if not c:
+            continue
+        upx_exe = os.path.join(c, "upx.exe")
+        if os.path.isfile(upx_exe):
+            return c
+    return None
+
+
+def pyinstaller_cmd(script: str, dist: str, debug: bool, upx_dir: str | None):
+    cmd = [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", dist]
+    if upx_dir:
+        cmd.append(f"--upx-dir={upx_dir}")
+    if debug:
+        cmd.extend(["-d", "all"])
+    cmd.append(script)
+    return cmd
+
+
+def resolve_tool(candidates, extra_dirs=None):
+    extra_dirs = extra_dirs or []
+    for name in candidates:
+        path = shutil.which(name)
+        if path:
+            return path
+        for d in extra_dirs:
+            if not d:
+                continue
+            candidate = os.path.join(d, name)
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
 def download_dependency():
     url = ""
     if os.path.exists("bin.7z"):
@@ -61,6 +113,37 @@ def run_step(cmd, bar, **kwargs):
 def main(python_builder: int, profile: int):
     print("Build script running...")
     print("Release build") if profile == 0 else print("Debug Build")
+    upx_dir = find_upx_dir()
+    if upx_dir:
+        print(f"Using UPX at: {upx_dir}")
+    else:
+        print("UPX not found, skipping UPX compression (set UPX_DIR to enable).")
+
+    extra_bins = []
+    for env_name in ("MINGW64_BIN", "MSYS2_MINGW64_BIN"):
+        v = os.getenv(env_name)
+        if v:
+            extra_bins.append(v)
+    extra_bins.append(r"E:\mingw64\bin")
+
+    windres = resolve_tool(["windres.exe", "windres"], extra_bins)
+    gxx = resolve_tool(["g++.exe", "g++"], extra_bins)
+
+    missing = []
+    if not windres:
+        missing.append("windres.exe (MinGW bin)")
+    if not gxx:
+        missing.append("g++.exe (MinGW GCC)")
+
+    if missing:
+        print("Missing required tools:")
+        for m in missing:
+            print(f" - {m}")
+        print("Please install/point MINGW64_BIN to your mingw64/bin (e.g. E:\\mingw64\\bin).")
+        return 1
+    else:
+        print(f"Using windres: {windres}")
+        print(f"Using g++: {gxx}")
     if not os.path.exists("bin.7z"):
         print("Download bin.7z first...")
         result = download_dependency()
@@ -99,19 +182,19 @@ def main(python_builder: int, profile: int):
         bar.set_description("Generating ICON Source")
 
         run_step(
-            ["windres.exe", "-i", "./src/launch.rc", "-o", "./build/icon.o"],
+            [windres, "-i", "./src/launch.rc", "-o", "./build/icon.o"],
             bar
         )
 
         bar.set_description("Building launcher")
         run_step(
-            ["g++.exe", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+            [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
              "-o", "build/main/双击运行.exe".encode("utf-8"),
              "-finput-charset=UTF-8", "-fexec-charset=GBK",
              "-lstdc++", "-lpthread", "-O3"],
             bar
         ) if profile == 0 else run_step(
-            ["g++.exe", "-Wall", "-static", "-g", "./src/launch.cpp", "./build/icon.o", "-municode",
+            [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
              "-o", "build/main/双击运行.exe".encode("utf-8"),
              "-finput-charset=UTF-8", "-fexec-charset=GBK",
              "-lstdc++", "-lpthread", "-Og"],
@@ -165,7 +248,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
                     "src/run_cmd.py", "--mingw64"],
                     bar
                 )
@@ -173,7 +256,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
                     "src/repair.py", "--mingw64"],
                     bar
                 )
@@ -181,7 +264,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
                     "src/start.py", "--mingw64"],
                     bar
                 )
@@ -189,49 +272,37 @@ def main(python_builder: int, profile: int):
             if profile == 0:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist",
-                    "src/run_cmd.py"],
+                    pyinstaller_cmd("src/run_cmd.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist",
-                    "src/repair.py"],
+                    pyinstaller_cmd("src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist",
-                    "src/start.py"],
+                    pyinstaller_cmd("src/start.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
             else:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist", "-d", "all",
-                    "src/run_cmd.py"],
+                    pyinstaller_cmd("src/run_cmd.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist", "-d", "all",
-                    "src/repair.py"],
+                    pyinstaller_cmd("src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), 
-                    "--onefile", "--distpath", "./build/py/dist", "-d", "all",
-                    "src/start.py"],
+                    pyinstaller_cmd("src/start.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
 
@@ -264,14 +335,17 @@ def main(python_builder: int, profile: int):
     shutil.copy2("./build/py/dist/run_cmd.exe", "./build/main/bin/run_cmd.exe")
     shutil.copy2("./build/py/dist/start.exe", "./build/main/bin/main.exe")
     shutil.copy2("./build/py/dist/repair.exe", "./build/main/bin/repair.exe")
-    if profile == 0:
-        shutil.copy2("./build/rust/release/jsonutil.exe", "./build/main/bin/jsonutil.exe")
-        shutil.copy2("./build/rust/release/lolcat.exe", "./build/main/bin/lolcat.exe")
-    else:
-        shutil.copy2("./build/rust/debug/jsonutil.exe", "./build/main/bin/jsonutil.exe")
-        shutil.copy2("./build/rust/debug/jsonutil.pdb", "./build/main/bin/jsonutil.pdb")
-        shutil.copy2("./build/rust/debug/lolcat.exe", "./build/main/bin/lolcat.exe")
-        shutil.copy2("./build/rust/debug/lolcat.pdb", "./build/main/bin/lolcat.pdb")
+
+    rust_out = "./build/rust/release" if profile == 0 else "./build/rust/debug"
+    rust_bins = {
+        "jsonutil.exe": os.path.join(rust_out, "jsonutil.exe"),
+        "lolcat.exe": os.path.join(rust_out, "lolcat.exe"),
+    }
+    for name, src_path in rust_bins.items():
+        if os.path.isfile(src_path):
+            shutil.copy2(src_path, f"./build/main/bin/{name}")
+        else:
+            print(f"Warning: Rust output not found: {src_path}")
 
     print("Build completed.")
     return 0
