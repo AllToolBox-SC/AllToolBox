@@ -111,7 +111,7 @@ def main(python_builder: int, profile: int):
              "-lstdc++", "-lpthread", "-O3"],
             bar
         ) if profile == 0 else run_step(
-            ["g++.exe", "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+            ["g++.exe", "-Wall", "-static", "-g", "./src/launch.cpp", "./build/icon.o", "-municode",
              "-o", "build/main/双击运行.exe".encode("utf-8"),
              "-finput-charset=UTF-8", "-fexec-charset=GBK",
              "-lstdc++", "-lpthread", "-Og"],
@@ -165,7 +165,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
                     "src/run_cmd.py", "--mingw64"],
                     bar
                 )
@@ -173,7 +173,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
                     "src/repair.py", "--mingw64"],
                     bar
                 )
@@ -181,7 +181,7 @@ def main(python_builder: int, profile: int):
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
                     "src/start.py", "--mingw64"],
                     bar
                 )
@@ -264,8 +264,14 @@ def main(python_builder: int, profile: int):
     shutil.copy2("./build/py/dist/run_cmd.exe", "./build/main/bin/run_cmd.exe")
     shutil.copy2("./build/py/dist/start.exe", "./build/main/bin/main.exe")
     shutil.copy2("./build/py/dist/repair.exe", "./build/main/bin/repair.exe")
-    shutil.copy2("./build/rust/release/jsonutil.exe", "./build/main/bin/jsonutil.exe")
-    shutil.copy2("./build/rust/release/lolcat.exe", "./build/main/bin/lolcat.exe")
+    if profile == 0:
+        shutil.copy2("./build/rust/release/jsonutil.exe", "./build/main/bin/jsonutil.exe")
+        shutil.copy2("./build/rust/release/lolcat.exe", "./build/main/bin/lolcat.exe")
+    else:
+        shutil.copy2("./build/rust/debug/jsonutil.exe", "./build/main/bin/jsonutil.exe")
+        shutil.copy2("./build/rust/debug/jsonutil.pdb", "./build/main/bin/jsonutil.pdb")
+        shutil.copy2("./build/rust/debug/lolcat.exe", "./build/main/bin/lolcat.exe")
+        shutil.copy2("./build/rust/debug/lolcat.pdb", "./build/main/bin/lolcat.pdb")
 
     print("Build completed.")
     return 0
