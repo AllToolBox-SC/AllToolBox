@@ -64,14 +64,19 @@ LINE = "-" * 68
 Option = Tuple[str, str]
 
 
+class Option:
+    def __init__(self, value, label):
+        self.value = value
+        self.label = label
+
 def menu_choice(
     message: str,
-    options: Iterable[Option],
+    options: Iterable[tuple],
     default: str | None = None,
     style_override: Style | None = None,
     extra_bindings: KeyBindings | None = None,
 ):
-    option_list: List[Option] = list(options)
+    option_list: List[tuple] = list(options)
     if not option_list:
         raise ValueError("menu_choice requires at least one option")
 
@@ -86,11 +91,6 @@ def menu_choice(
             if value == default:
                 selected_index = idx
                 display_index = idx
-                break
-    if default is not None:
-        for idx, (value, _) in enumerate(option_list):
-            if value == default:
-                selected_index = idx
                 break
 
     kb = KeyBindings()
@@ -114,7 +114,7 @@ def menu_choice(
         except ValueError:
             return
         if 0 <= idx < len(option_list):
-            _set_selection(idx, event)
+            _set_selection(idx, event.app)
 
     for d in "0123456789":
         @kb.add(d, eager=True)
@@ -141,26 +141,27 @@ def menu_choice(
 
         move_task = app.create_background_task(_run())
 
-    def _set_selection(idx: int, event):
+    def _set_selection(idx: int, app):
         nonlocal selected_index, display_index
         selected_index = _clamp(idx)
-        _animate_move(selected_index, event.app)
+        _animate_move(selected_index, app)
 
     @kb.add("up")
     @kb.add("k")
     def _(event):
-        _set_selection(selected_index - 1, event)
+        _set_selection(selected_index - 1, event.app)
 
     @kb.add("down")
     @kb.add("j")
     def _(event):
-        _set_selection(selected_index + 1, event)
+        _set_selection(selected_index + 1, event.app)
 
     last_click = {"idx": None, "t": 0.0}
 
     def mouse_handler(mouse_event):
         nonlocal selected_index
-        if mouse_event.event_type not in (MouseEventType.MOUSE_UP, MouseEventType.MOUSE_MOVE):
+        # You can add MouseEventType.MOUSE_MOVE event type to allow mouse-move-select.
+        if mouse_event.event_type != MouseEventType.MOUSE_UP:
             return NotImplemented
 
         y = mouse_event.position.y
@@ -215,7 +216,7 @@ def menu_choice(
             "radio": "fg:#cbd6e2",
             "radio-selected": "fg:#e6edf3 bold underline",
             "radio-checked": "fg:#7ad1a8",
-            "radio-number": "fg:#9dcffb",
+            "radio-number": "fg:#9dcffb bold",
         }
     )
 
@@ -480,7 +481,7 @@ def xtcservice():
     if result == "1":
         run("call friend")
     if result == "2":
-        run('powershell -ExecutionPolicy Bypass -File ".\\zj.ps1"')
+        run('powershell -ExecutionPolicy Bypass -File zj.ps1')
     if result == "3":
         run("call ota")
     xtcservice()
