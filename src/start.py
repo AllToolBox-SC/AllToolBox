@@ -884,7 +884,7 @@ def pre_main() -> bool:
                     subprocess.run(["cmd", "/c", "start", "repair.exe"])
                     cleanup(2)
         except Exception as e:
-            print_formatted_text(HTML(warn + f"漏洞补丁获取失败，错误信息：{str(e)}"))
+            print_formatted_text(HTML(warn + f"漏洞补丁获取失败，已经跳过"))
         run("call upall.bat run")
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
