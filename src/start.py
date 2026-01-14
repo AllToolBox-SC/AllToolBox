@@ -535,11 +535,38 @@ def debug():
         case "5":
             sel()
         case "6":
-            current = (os.getenv("ATB_SYS_Channel") or "").lower()
-            new_val = "beta" if current != "beta" else "1"
-            set_env_variable("ATB_SYS_Channel", new_val)
-            os.environ["ATB_SYS_Channel"] = new_val
-            print_formatted_text(HTML(info + f"已切换更新通道为: {new_val}"), style=style)
+            def find_check_exe() -> str | None:
+                candidates = [
+                    "check.exe",
+                    os.path.join("..", "check.exe"),
+                ]
+                for p in candidates:
+                    if os.path.isfile(p):
+                        return p
+                return None
+
+            check_path = find_check_exe()
+            if not check_path:
+                print_formatted_text(HTML(error + "未找到check.exe，无法切换通道"), style=style)
+                time.sleep(1)
+                return debug()
+
+            try:
+                proc = subprocess.run([check_path], capture_output=True, text=True)
+            except Exception as exc:
+                print_formatted_text(HTML(error + f"运行check.exe失败: {exc}"), style=style)
+                time.sleep(1)
+                return debug()
+
+            if proc.returncode == 1:
+                current = (os.getenv("ATB_SYS_Channel") or "").lower()
+                new_val = "beta" if current != "beta" else "1"
+                set_env_variable("ATB_SYS_Channel", new_val)
+                os.environ["ATB_SYS_Channel"] = new_val
+                print_formatted_text(HTML(info + f"已切换更新通道为: {new_val}"), style=style)
+            else:
+                msg = proc.stdout.strip() if proc.stdout else "验证失败"
+                print_formatted_text(HTML(error + f"验证未通过，未切换: {msg}"), style=style)
             time.sleep(1)
     debug()
 

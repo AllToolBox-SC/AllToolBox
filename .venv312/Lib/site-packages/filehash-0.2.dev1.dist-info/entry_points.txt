@@ -1,0 +1,3 @@
+[console_scripts]
+chkfilehash = filehash.filehash_cli:main
+
