@@ -20,3 +20,8 @@ __pycache__/
 /main.spec
 /nuitka-crash-report.xml
 source/
+/gpp_err.txt
+/gpp_err2.txt
+/gpp_log.txt
+
+
