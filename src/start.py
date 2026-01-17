@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import os
 import sys
 import shutil
 import platform
 import time
+import datetime
 import asyncio
 from typing import Optional, Tuple, Iterable, List
 from prompt_toolkit import (
@@ -29,12 +31,25 @@ import socket
 import requests
 import filehash
 import json
+import traceback
 import winreg
 
+try:
+    import debughook
+except ImportError:
+    pass
 
+
+class MultilineFormatter(logging.Formatter):
+    def format(self, record):
+        original = super().format(record)
+        lines = original.splitlines()
+        if len(lines) <= 1:
+            return original
+        prefix = lines[0][:len(lines[0]) - len(record.getMessage())]
+        return '\n'.join([lines[0]] + [prefix + line for line in lines[1:]])
 
 style = Style.from_dict({
-    # Dark base, subtle accents, minimal fill
     "yellow": "fg:#f1c40f",
     "red": "fg:#ff7b7b",
     "orange": "fg:#f4a261",
@@ -58,6 +73,19 @@ flag = False
 key = False
 
 LINE = "-" * 68
+DEBUG = os.getenv("ATB_DEBUG_MODE", "0") == "1"
+
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+logger.handlers.clear()
+os.makedirs("logs", exist_ok=True)
+filename = f"logs/atb_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+file_handler = logging.FileHandler(filename, encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+formatter = MultilineFormatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
 
 def page_transition(text: str = "", duration: float = 0.35) -> None:
     """Simple console transition animation when switching pages."""
@@ -78,6 +106,22 @@ def page_transition(text: str = "", duration: float = 0.35) -> None:
 # session = subprocess.Popen(["cmd.exe"], shell=True)
 
 Option = Tuple[str, str]
+
+def onerror(fn):
+    def wrapper(*args, **kwargs):
+        global logger
+        global style
+        global error
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            err_msg = traceback.format_exc()
+            logger.error(f"Error in {fn.__name__}: {e}")
+            logger.error(err_msg)
+            print_formatted_text(HTML(error + "抱歉，脚本遇到了未经捕获的异常，即将退出..."))
+            print_formatted_text(HTML(info + "错误详情已记录到 bin/logs 文件夹中，您可以将该文件发送给技术支持以获取帮助。"))
+            cleanup(-1)
+    return wrapper
 
 
 class Option:
@@ -422,6 +466,8 @@ def control():
         run("call opencharge")
     if result == "5":
         run("call innermodel")
+        print_formatted_text(HTML(info + "按任意键返回上级菜单"), style=style)
+        pause()
     if result == "6":
         run("call rebootpro")
     control()
@@ -780,12 +826,17 @@ def pause():
 
 def pre_main() -> bool:
     global flag
+    global logger
+    global DEBUG
     run("@echo off")
     run("setlocal enabledelayedexpansion")
     # subprocess.run(["chcp", "65001"], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print_formatted_text(HTML(info + "正在启动中..."), style=style)
     colorama.init(autoreset=True)
     run("call .\\color.bat")
+    if DEBUG:
+        print_formatted_text(HTML(info + "已启用调试模式"), style=style)
+        logger.debug("Debug mode is enabled")
     if " " in os.path.abspath("."):
         if os.getenv("ATB_IGNORE_SPACE_IN_PATH", "0") != "1":
             print_formatted_text(HTML(error + "当前路径包含空格，会导致未知问题，请将工具箱放置在无空格路径下运行，即将退出..."), style=style)
@@ -1013,7 +1064,6 @@ def main() -> int:
     global key
     global style
     try:
-        clear()
 
         pre = pre_main() if not flag else True
         if not pre: return 1

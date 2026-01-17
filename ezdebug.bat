@@ -14,7 +14,7 @@ if "%1"=="/mode:full" (
     echo !FILENAME! ^[/mode: ^{full ^| minimize ^(default^)^}^]
     echo.
     echo ERROR: No command.
-    goto :EOF
+    goto :end
 )
 
 :init
@@ -41,7 +41,8 @@ if "%1"=="/mode:full" (
     cd source
     start cmd.exe /c "gdb launch.exe & pause"
 )
-endlocal & goto :EOF
+endlocal & goto :end
 
-:EOF
+:end
 endlocal
+goto :EOF

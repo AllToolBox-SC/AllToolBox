@@ -43,7 +43,9 @@ def pyinstaller_cmd(script: str, dist: str, debug: bool, upx_dir: str | None):
     if upx_dir:
         cmd.append(f"--upx-dir={upx_dir}")
     if debug:
-        cmd.extend(["-d", "all"])
+        cmd.extend(["-d", "all", "--hidden-import", "debughook"])
+    else:
+        cmd.extend(["--exclude-module", "debughook"])
     cmd.append(script)
     return cmd
 
@@ -112,7 +114,7 @@ def run_step(cmd, bar, **kwargs):
         raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
 
 
-def main(python_builder: int, profile: int):
+def main(python_builder: int, profile: int, bmode: str):
     print("Build script running...")
     print("Release build") if profile == 0 else print("Debug Build")
     upx_dir = find_upx_dir()
@@ -227,7 +229,7 @@ def main(python_builder: int, profile: int):
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/run_cmd.py", "--mingw64"],
+                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
 
@@ -235,7 +237,7 @@ def main(python_builder: int, profile: int):
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/repair.py", "--mingw64"],
+                    "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
                 
@@ -243,31 +245,31 @@ def main(python_builder: int, profile: int):
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/start.py", "--mingw64"],
+                    "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
             else:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
-                    "src/run_cmd.py", "--mingw64"],
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
-                    "src/repair.py", "--mingw64"],
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug",
-                    "src/start.py", "--mingw64"],
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
         else:
@@ -400,8 +402,11 @@ if __name__ == "__main__":
     )
     group.add_argument(
         "--nuitka",
-        action="store_true",
-        help="Use Nuitka"
+        nargs="?",
+        const="mingw",
+        choices=["mingw", "msvc"],
+        default=None,
+        help="Use Nuitka with specified compiler (mingw | msvc). Default: mingw if --nuitka is set"
     )
     args = parser.parse_args()
 
@@ -411,5 +416,6 @@ if __name__ == "__main__":
         pybuilder = 0
     
     profile = 0 if args.type == "release" else 1
-    
-    sys.exit(main(pybuilder, profile))
+    bmode = args.nuitka if args.nuitka else "pyinstaller"
+
+    sys.exit(main(pybuilder, profile, bmode))
