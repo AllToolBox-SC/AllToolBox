@@ -118,8 +118,9 @@ def onerror(fn):
             err_msg = traceback.format_exc()
             logger.error(f"Error in {fn.__name__}: {e}")
             logger.error(err_msg)
-            print_formatted_text(HTML(error + "抱歉，脚本遇到了未经捕获的异常，即将退出..."))
-            print_formatted_text(HTML(info + "错误详情已记录到 bin/logs 文件夹中，您可以将该文件发送给技术支持以获取帮助。"))
+            print_formatted_text(HTML(error + "抱歉，脚本遇到了未经捕获的异常，即将退出..."), style=style)
+            print_formatted_text(HTML(info + "错误详情已记录到 bin/logs 文件夹中，您可以将该文件发送给技术支持以获取帮助。"), style=style)
+            time.sleep(3)
             cleanup(-1)
     return wrapper
 
@@ -331,6 +332,7 @@ def set_env_variable(name, value, user=True):
     winreg.CloseKey(registry_key)
 
 
+@onerror
 def get_env_variable(name, user=True) -> Optional[str]:
     """Read environment variable directly from registry to avoid stale process env."""
     root = winreg.HKEY_CURRENT_USER if user else winreg.HKEY_LOCAL_MACHINE
@@ -343,6 +345,7 @@ def get_env_variable(name, user=True) -> Optional[str]:
     except FileNotFoundError:
         return None
 
+@onerror
 def menu() -> str:
     global style
     if os.path.exists("mod") and os.path.isdir("mod"):
@@ -381,12 +384,12 @@ def menu() -> str:
             ("openshell", "在此处打开cmd[含adb环境]"),
             ("about", "关于脚本"),
             ("mods", "扩展管理"),
-            ("flash-files", "刷机与文件[子菜单]"),
-            ("connection-debug", "连接与调试[子菜单]"),
+            ("commonly", "常用合集[子菜单]"),
+            ("help-links", "链接合集[子菜单]"),
             ("man-apps", "应用管理[子菜单]"),
-            ("imoo-services", "小天才服务[子菜单]"),
-            ("help-links", "帮助与链接[子菜单]"),
-            ("exit", "退出脚本")
+            ("magisk-mod", "magisk模块管理[子菜单]"),
+            ("user-debug", "开发合集[子菜单]"),
+            ("exit", "退出工具")
         ],
         default="onekeyroot",
         extra_bindings=kb
@@ -405,7 +408,7 @@ def run(cmd):
                     endlocal 1>nul 2>nul &
                     '''.replace("\n", "").replace(20*" ", "")], shell=True)
 
-
+@onerror
 def appset():
     global style
     clear()
@@ -437,60 +440,67 @@ def appset():
         run("call z10openinst")
     appset()
 
-def control():
+@onerror
+def userdebug():
     clear()
     run("call logo")
     result = choose(
-        message="连接与调试菜单",
+        message="开发合集",
         #text="请选择",
         options=[
             ("A", "返回上级菜单"),
-            ("1", "进入qmmi[9008]"),
-            ("2", "scrcpy投屏"),
-            ("3", "手表信息"),
-            ("4", "打开充电可用"),
-            ("5", "型号与innermodel对照表"),
-            ("6", "高级重启"),
+            ("1", "手表信息"),
+            ("2", "打开充电可用"),
+            ("3", "型号与innermodel对照表"),
+            ("4", "导入本地root文件"),
+            ("5", "一键root[不刷userdata]"),
+            ("6", "恢复出厂设置[不是超级恢复]"),
+            ("7", "开机自刷Recovery"),
+            ("8", "强制加好友[已失效]"),
         ],
         default="A"
     )
     if result == "A":
         clear(); return
     if result == "1":
-        run("call qmmi")
-    if result == "2":
-        run("start scrcpy-noconsole.vbs")
-    if result == "3":
         run("call listbuild")
-    if result == "4":
+    if result == "2":
         run("call opencharge")
-    if result == "5":
+    if result == "3":
         run("call innermodel")
         print_formatted_text(HTML(info + "按任意键返回上级菜单"), style=style)
         pause()
+    if result == "4":
+        run("call pashroot")
+    if result == "5":
+        run("call root nouserdata")
     if result == "6":
-        run("call rebootpro")
-    control()
+        run("call miscre")
+    if result == "7":
+        run("call pashtwrppro")
+    if result == "8":
+        run("call friend")
+    userdebug()
 
-def flash():
+@onerror
+def commonly():
     global style
     clear()
     run("call logo")
     result = choose(
-        message="刷机与文件菜单",
+        message="常用合集",
         #text="请选择",
         options=[
             ("A", "返回上级菜单"),
-            ("1", "从云端更新文件"),
-            ("2", "导入本地root文件"),
-            ("3", "一键root[不刷userdata]"),
-            ("4", "恢复出厂设置"),
-            ("5", "开机自刷Recovery"),
-            ("6", "刷入TWRP"),
-            ("7", "刷入XTC Patch"),
-            ("8", "刷入Magisk模块"),
-            ("9", "备份与恢复"),
-            ("10", "安卓8.1root后优化")
+            ("1", "ADB/自检校验码计算"),
+            ("2", "离线OTA升级"),
+            ("3", "刷入TWRP"),
+            ("4", "刷入XTC Patch"),
+            ("5", "备份与恢复"),
+            ("6", "安卓8.1root后优化"),
+            ("7", "进入qmmi[9008]"),
+            ("8", "scrcpy投屏"),
+            ("9", "高级重启"),
         ],
         default="A"
     )
@@ -498,56 +508,51 @@ def flash():
         case "A":
             clear(); return
         case "1":
-            run("call cloud")
+            run("powershell -ExecutionPolicy Bypass -File zj.ps1")
         case "2":
-            run("call pashroot")
+            run("call ota")
         case "3":
-            run("call root nouserdata")
-        case "4":
-            run("call miscre")
-        case "5":
-            run("call pashtwrppro")
-        case "6":
             run("call pashtwrp")
-        case "7":
+        case "4":
             run("call xtcpatch")
-        case "8":
-            run("call userinstmodule")
-        case "9":
+        case "5":
             run("call backup")
-        case "10":
+        case "6":
             run("call rootpro")
+        case "7":
+            run("call qmmi")
+            print_formatted_text(HTML(info + "按任意键返回上级菜单"), style=style)
+            pause()
+        case "8":
+            run("call scrcpy-ui.bat")
+        case "9":
+            run("call rebootpro")
         case _:
             print_formatted_text(HTML(error + "输入错误，请重新输入"), style=style)
-        
-    flash()
+    commonly()
 
-def xtcservice():
+@onerror
+def magisk():
 
     global style
     clear()
     run("call logo")
     result = choose(
-        message="小天才服务菜单",
+        message="magisk模块管理",
         #text="请选择",
         options=[
             ("A", "返回上级菜单"),
-            ("1", "手表强加好友[已弃用]"),
-            ("2", "ADB/自检校验码计算"),
-            ("3", "离线OTA升级"),
+            ("1", "刷入Magisk模块"),
         ],
         default="A"
     )
     if result == "A":
         clear(); return
     if result == "1":
-        run("call friend")
-    if result == "2":
-        run('powershell -ExecutionPolicy Bypass -File zj.ps1')
-    if result == "3":
-        run("call ota")
-    xtcservice()
+        run("call userinstmodule")
+    magisk()
 
+@onerror
 def debug():
     global style
     clear()
@@ -614,6 +619,7 @@ def debug():
             time.sleep(1)
     debug()
 
+@onerror
 def sel():
     clear()
     run("call sel file s .")
@@ -621,6 +627,7 @@ def sel():
     run("call sel file m .")
     run("pause")
 
+@onerror
 def color():
     clear()
     print_formatted_text(HTML(info +"<black>BLACK</black>"), style=style)
@@ -633,6 +640,8 @@ def color():
     print_formatted_text(HTML(info +"<white>WHITE</white>"), style=style)
     run("pause")
 
+
+@onerror
 def help_menu():
     clear()
     run("call logo")
@@ -641,14 +650,13 @@ def help_menu():
         #text="请选择",
         options=[
             ("A", "返回上级菜单"),
-            ("1", "远程协助"),
-            ("2", "超级恢复文件下载"),
-            ("3", "离线OTA下载"),
-            ("4", "面具模块下载"),
-            ("5", "APK下载"),
-            ("6", "工具箱官网"),
-            ("7", "开发文档"),
-            ("8", "123云盘解除下载限制")
+            ("1", "超级恢复文件下载"),
+            ("2", "离线OTA下载"),
+            ("3", "面具模块下载"),
+            ("4", "APK下载"),
+            ("5", "工具箱官网"),
+            ("6", "开发文档"),
+            ("7", "123云盘解除下载限制")
         ],
         default="A"
     )
@@ -657,18 +665,16 @@ def help_menu():
             clear()
             return
         case "1":
-            print_formatted_text(HTML(warn + "已弃用该功能"))
-        case "2":
             run("start https://www.123865.com/s/Q5JfTd-hEbWH")
-        case "3":
+        case "2":
             run("start https://www.123865.com/s/Q5JfTd-HEbWH")
-        case "4":
+        case "3":
             run("start https://www.123684.com/s/Q5JfTd-cEbWH")
-        case "5":
+        case "4":
             run("start https://www.123684.com/s/Q5JfTd-ZEbWH")
-        case "6":
+        case "5":
             run("start https://atb.xgj.qzz.io")
-        case "7":
+        case "6":
             with open("开发文档.txt", "r", encoding="utf-8") as f:
                 doc = f.read()
                 print_formatted_text(HTML(doc), style=style)
@@ -678,7 +684,7 @@ def help_menu():
                 key_bindings=kb,
                 style=style
             )
-        case "8":
+        case "7":
             run("call patch123")
         
     help_menu()
@@ -718,9 +724,11 @@ def load_mod_menu():
     return mapping.get(result)
 
 
+@onerror
 def run_mod_main(modname):
     run(f'cd /d mod\\{modname} && call main.bat')
 
+@onerror
 def mod():
     clear()
     run("call logo")
@@ -752,7 +760,7 @@ def mod():
 
     mod()
 
-
+@onerror
 def about():
     print_formatted_text(
         HTML(f"<yellow>{LINE}</yellow>"),
@@ -803,6 +811,7 @@ def about():
         style=style
     )
 
+@onerror
 def checkwin() -> Tuple[str, str, str, str]:
     return (
         platform.system(),
@@ -824,6 +833,7 @@ def pause():
     PromptSession(key_bindings=kb).prompt("")
 
 
+@onerror
 def pre_main() -> bool:
     global flag
     global logger
@@ -831,7 +841,7 @@ def pre_main() -> bool:
     run("@echo off")
     run("setlocal enabledelayedexpansion")
     # subprocess.run(["chcp", "65001"], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print_formatted_text(HTML(info + "正在启动中..."), style=style)
+    # print_formatted_text(HTML(info + "正在启动中..."), style=style)
     colorama.init(autoreset=True)
     run("call .\\color.bat")
     if DEBUG:
@@ -1036,7 +1046,7 @@ def check_adb_server() -> Tuple[bool, Optional[Exception]: None]:
     adb_server.close()
     return True
 
-
+@onerror
 def cleanup(code: int = 0):
     global style
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
@@ -1057,7 +1067,7 @@ def cleanup(code: int = 0):
 
     sys.exit(code)
 
-
+@onerror
 def main() -> int:
     # do
     global flag
@@ -1072,15 +1082,15 @@ def main() -> int:
         match result:
             case "SHIFT_D": debug()
             case "onekeyroot":
-                clear(); run("call root.bat")
+                clear(); run("call root.bat"); clear()
             case "openshell":
-                clear(); subprocess.run(["cmd.exe", "/k"], shell=True)
+                clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
             case "about": about()
             case "mods": mod()
-            case "flash-files": flash()
-            case "connection-debug": control()
+            case "commonly": commonly()
+            case "user-debug": userdebug()
             case "man-apps": appset()
-            case "imoo-services": xtcservice()
+            case "magisk-mod": magisk()
             case "help-links":  help_menu()
             case "exit": return 0
         return main() # loop
