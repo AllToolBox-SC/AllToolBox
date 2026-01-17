@@ -4,6 +4,10 @@
 
 #define DEBUG 0
 
+#ifdef _MSC_VER
+#define MSVC
+#endif
+
 #include <iostream>
 #include <stdlib.h>
 #include <string>

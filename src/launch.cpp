@@ -23,7 +23,7 @@ BOOL IsRunAsAdmin()
 
 void Message()
 {
-    MessageBox(NULL, (LPCWSTR)L"请以管理员身份运行！", (LPCWSTR)L"授权失败", MB_OK | MB_ICONERROR);
+    MessageBoxW(NULL, (LPCWSTR)L"请以管理员身份运行！", (LPCWSTR)L"授权失败", MB_OK | MB_ICONERROR);
 }
 
 void ElevatePrivileges()
@@ -73,7 +73,7 @@ void RunMainBat()
     printf("\033[94m[信息]\033[97m正在启动中...\033[0m\n");
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
-    SetCurrentDirectory(L".\\bin\\");
+    SetCurrentDirectoryW(L".\\bin\\");
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     DWORD flags = 0;

@@ -2,7 +2,14 @@
 goto %1 1>nul 2>nul
 :run
 del /Q /F .\versiontmp.txt 1>nul 2>nul
-curl.exe -s -k https://ATB.xgj.qzz.io/versiontmp.txt -o versiontmp.txt 2>nul
+if "%ATB_SYS_Channel%"=="1" (
+ curl.exe -s -k https://ATB.xgj.qzz.io/versiontmp.txt -o versiontmp.txt 2>nul
+) else if "%ATB_SYS_Channel%"=="beta" (
+ curl.exe -s -k https://ATB.xgj.qzz.io/betaversiontmp.txt -o versiontmp.txt 2>nul
+) else (
+ curl.exe -s -k https://ATB.xgj.qzz.io/versiontmp.txt -o versiontmp.txt 2>nul
+)
+
 if %errorlevel% neq 0 (
    echo %ERROR%检查更新时出错，错误值:%errorlevel%
    exit /b
@@ -34,6 +41,10 @@ exit /b
 del /Q /F .\versiontmp.txt 1>nul 2>nul
 set /p yes="输入yes更新，按任意键不更新："
 if not "%yes%"=="yes" exit /b
+ECHO.%INFO%等待2秒后打开链接%RESET%
+busybox sleep 2
+start https://atb.xgj.qzz.io
+exit
 copy /Y .\runupall.bat ..\runupall.bat
 copy /Y .\7z.dll ..\7z.dll
 copy /Y .\7z.exe ..\7z.exe
@@ -41,4 +52,3 @@ copy /Y .\curltool.bat ..\curltool.bat
 copy /Y .\curl.exe ..\curl.exe
 if exist .\mod xcopy /s /e /y  .\mod ..\mod
 start ..\runupall.bat
-exit

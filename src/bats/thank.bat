@@ -16,4 +16,6 @@ ECHO.%RED%[开发者%ORANGEPRO%辅助]%ORANOE%小白人%GREEN%QF%CYAN%ZM%BLUE%（不知道%P
 ECHO.%WHITE%[QQ]纯黑%RESET%
 ECHO.%WHITE%[工具箱及其团队]NEW CRACK%RESET%
 ECHO.%WHITE%[工具]小天才全系列root工具离线版%RESET%
+ECHO.%WHITE%[开发者]星旬star%RESET%
+ECHO.%WHITE%[开发者]阿哈%RESET%
 ECHO.%YELLOW%════════════════════════════════%RESET%

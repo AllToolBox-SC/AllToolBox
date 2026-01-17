@@ -1,8 +1,9 @@
 :run
-qfh_loader.exe %1 %2 %3 %4 %5 %6 %7 %8 %9 >FHtmp.txt || goto error
-
+qfh_loader.exe %* >qfhtmp.txt || goto error
+exit /b
 :error
-copy /Y .\FHtmp.txt .\Errorlog\FHerror_%date%_%time%.txt
-set /p FHtmp=%error%璇诲彇鎴栧埛鍏ュけ璐ワ紒[杈撳叆"l"杈撳嚭鏃ュ織]鎸変换鎰忛敭閲嶆柊灏濊瘯...
-if "FHtmp"=="l" type FHtmp.txt & echo.鎸変换鎰忛敭閲嶈瘯... & pause >nul
+copy /Y .\qfhtmp.txt .\Errorlog\qfherror_%RANDOM%%RANDOM%.txt >nul
+set qfhtmp=""
+set /p qfhtmp=%error%9008重启失败！[输入"log"输出日志]按任意键重新尝试...
+if "%qfhtmp%"=="log" type qfhtmp.txt & echo.按任意键重试... & pause >nul
 goto run

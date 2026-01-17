@@ -48,13 +48,12 @@ copy /Y .\EDL\misc\misc_%innermodel%.xml .\EDL\rooting\misc.xml
 copy /Y .\EDL\misc\misc.img .\EDL\rooting\misc.img
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-ECHO %INFO%如果长时间卡死在这里，可能是已经引导了
-ECHO %INFO%请尝试按下ctrl+c，随后输入n，跳过该命令
-QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn >nul
+call QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8937.mbn
 ECHO %INFO%开始刷入misc%RESET%
-fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+call edlport >nul
+call fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
 ECHO %INFO%执行重启%RESET%
-qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+call qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%已进入QMMI%RESET%
@@ -71,13 +70,12 @@ ECHO %INFO%解压所需文件%RESET%
 copy /Y .\EDL\misc\misc.mbn .\EDL\rooting\misc.mbn
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-ECHO %INFO%如果长时间卡死在这里，可能是已经引导了
-ECHO %INFO%请尝试按下ctrl+c，随后输入n，跳过该命令
-QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn >nul
+call QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\msm8909w.mbn
 ECHO %INFO%开始刷入misc%RESET%
-fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt >nul
+call edlport >nul
+call fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
 ECHO %INFO%执行重启%RESET%
-qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+call qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%已进入QMMI%RESET%
@@ -92,13 +90,12 @@ copy /Y .\EDL\misc\misc_ND03.xml .\EDL\rooting\misc.xml
 copy /Y .\EDL\misc\misc.img .\EDL\rooting\misc.img
 ECHO %INFO%获取9008端口并执行引导%RESET%
 call edlport
-ECHO %INFO%如果长时间卡死在这里，可能是已经引导了
-ECHO %INFO%请尝试按下ctrl+c，随后输入n，跳过该命令
-QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\prog_firehose_ddr.elf
+call QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\prog_firehose_ddr.elf
 ECHO %INFO%开始刷入misc%RESET%
-fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
+call edlport >nul
+call fh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\rooting --sendxml=EDL\rooting\misc.xml --noprompt
 ECHO %INFO%执行重启%RESET%
-qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+call qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt
 ECHO %INFO%清理临时数据%RESET%
 del /Q /F ".\EDL\rooting\*.*"
 ECHO %INFO%已进入QMMI%RESET%

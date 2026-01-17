@@ -8,9 +8,22 @@ import venv
 import py7zr
 import shutil
 import argparse
+import colorama
 from tqdm import tqdm
 
 
+
+def onerror(func):
+    def handler(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(colorama.Fore.RED + "E: " + colorama.Fore.RESET + f"Error during {func.__name__}: {e}")
+            sys.exit(1)
+            
+    return handler
+
+@onerror
 def find_upx_dir():
     """Locate UPX executable directory, preferring explicit env then common paths."""
     candidates = []
@@ -37,7 +50,7 @@ def find_upx_dir():
             return c
     return None
 
-
+@onerror
 def pyinstaller_cmd(script: str, dist: str, debug: bool, upx_dir: str | None):
     cmd = [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", dist]
     if upx_dir:
@@ -50,6 +63,15 @@ def pyinstaller_cmd(script: str, dist: str, debug: bool, upx_dir: str | None):
     return cmd
 
 
+def get_rust_target_triple():
+    result = subprocess.run(["rustc", "-vV"], capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        if line.startswith("host:"):
+            return line.split()[1]
+    return None
+
+
+@onerror
 def resolve_tool(candidates, extra_dirs=None):
     extra_dirs = extra_dirs or []
     for name in candidates:
@@ -65,6 +87,7 @@ def resolve_tool(candidates, extra_dirs=None):
     return None
 
 
+@onerror
 def download_dependency():
     url = ""
     if os.path.exists("bin.7z"):
@@ -97,16 +120,21 @@ def download_dependency():
         return False
 
 
+@onerror
 def run_step(cmd, bar, **kwargs):
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        text=False,
         bufsize=1,
         **kwargs
     )
-    for line in p.stdout:
+    for line_bytes in p.stdout:
+        try:
+            line = line_bytes.decode('gbk')
+        except UnicodeDecodeError:
+            line = line_bytes.decode('utf-8', errors='replace')
         tqdm.write(line.rstrip())
     p.wait()
     bar.update(1)
@@ -114,15 +142,18 @@ def run_step(cmd, bar, **kwargs):
         raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
 
 
-def main(python_builder: int, profile: int, bmode: str):
+@onerror
+def main(python_builder: int, profile: int, bmode: str, builder: int):
     print("Build script running...")
     print("Release build") if profile == 0 else print("Debug Build")
+    os.environ["PYTHONUTF8"] = "1"
     upx_dir = find_upx_dir()
     if upx_dir:
         print(f"Using UPX at: {upx_dir}")
     else:
         print("UPX not found, skipping UPX compression (set UPX_DIR to enable).")
-
+    rust_toolset = get_rust_target_triple()
+    print(f"Rust target triple: {rust_toolset}")
     extra_bins = []
     for env_name in ("MINGW64_BIN", "MSYS2_MINGW64_BIN"):
         v = os.getenv(env_name)
@@ -183,27 +214,48 @@ def main(python_builder: int, profile: int, bmode: str):
         leave=True
     ) as bar:
 
-        bar.set_description("Generating ICON Source")
+        
 
-        run_step(
-            [windres, "-i", "./src/launch.rc", "-o", "./build/icon.o"],
-            bar
-        )
+        
+        if not builder:
+            bar.set_description("Generating ICON Source")
 
-        bar.set_description("Building launcher")
-        run_step(
-            [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
-             "-o", "build/main/双击运行.exe".encode("utf-8"),
-             "-finput-charset=UTF-8", "-fexec-charset=GBK",
-             "-lstdc++", "-lpthread", "-O3"],
-            bar
-        ) if profile == 0 else run_step(
-            [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
-             "-o", "build/main/双击运行.exe".encode("utf-8"),
-             "-finput-charset=UTF-8", "-fexec-charset=GBK",
-             "-lstdc++", "-lpthread", "-Og"],
-            bar
-        )
+            run_step(
+                [windres, "-i", "./src/launch.rc", "-o", "./build/icon.o"],
+                bar
+            )
+            bar.set_description("Building launcher")
+            run_step(
+                [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+                "-o", "build/main/双击运行.exe".encode("utf-8"),
+                "-finput-charset=UTF-8", "-fexec-charset=GBK",
+                "-lstdc++", "-lpthread", "-O3"],
+                bar
+            ) if profile == 0 else run_step(
+                [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+                "-o", "build/main/双击运行.exe".encode("utf-8"),
+                "-finput-charset=UTF-8", "-fexec-charset=GBK",
+                "-lstdc++", "-lpthread", "-Og"],
+                bar
+            )
+        elif builder == 1:
+            bar.set_description("Generating ICON Source")
+            run_step(
+                ["rc.exe", "/fo", "build\\icon.res", "src\\launch.rc"],
+                bar
+            )
+            run_step(
+                ["cvtres.exe", "/out:build\\icon.obj", "build\\icon.res"],
+                bar
+            )
+            bar.set_description("Building launcher")
+            run_step(
+                ["cl.exe", "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", "advapi32.lib", "user32.lib", "shell32.lib"],
+                bar
+            ) if profile == 0 else run_step(
+                ["cl.exe", "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", "advapi32.lib", "user32.lib", "shell32.lib"],
+                bar
+            )
 
         bar.set_description("Installing requirements")
         run_step(
@@ -228,7 +280,7 @@ def main(python_builder: int, profile: int, bmode: str):
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist"
                     "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
@@ -252,7 +304,7 @@ def main(python_builder: int, profile: int, bmode: str):
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
@@ -260,7 +312,7 @@ def main(python_builder: int, profile: int, bmode: str):
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
@@ -268,7 +320,7 @@ def main(python_builder: int, profile: int, bmode: str):
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
@@ -369,6 +421,28 @@ def main(python_builder: int, profile: int, bmode: str):
     shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
     shutil.copy2(outputs["repair"], "./build/main/bin/repair.exe")
+    
+
+    if profile == 1:
+        if bmode == "msvc":
+            try:
+                shutil.copy2("build/py/dist/run_cmd.pdb", "./build/main/bin/run_cmd.pdb")
+                shutil.copy2("build/py/dist/start.pdb", "./build/main/bin/main.pdb")
+                shutil.copy2("build/py/dist/repair.pdb", "./build/main/bin/repair.pdb")
+            except Exception as e:
+                print(f"Warning: Failed to copy PDB files: {e}")
+        if "msvc" in rust_toolset:
+            try:
+                pdbs = [
+                    "jsonutil.pdb",
+                    "lolcat.pdb",
+                ]
+                for pdb in pdbs:
+                    src_pdb = os.path.join("./build/rust/debug", pdb)
+                    if os.path.isfile(src_pdb):
+                        shutil.copy2(src_pdb, f"./build/main/bin/{pdb}")
+            except Exception as e:
+                print(f"Warning: Failed to copy PDB files: {e}")
 
     rust_out = "./build/rust/release" if profile == 0 else "./build/rust/debug"
     rust_bins = {
@@ -408,14 +482,32 @@ if __name__ == "__main__":
         default=None,
         help="Use Nuitka with specified compiler (mingw | msvc). Default: mingw if --nuitka is set"
     )
+
+    group1 = parser.add_mutually_exclusive_group()
+    group1.add_argument(
+        "--mingw",
+        action="store_true",
+        help="Use MinGW compiler for cpps"
+    )
+    group1.add_argument(
+        "--msvc",
+        action="store_true",
+        help="Use MSVC compiler for cpps (Please ensure MSVC is properly set up in your environment)"
+    )
+    colorama.init(autoreset=True)
     args = parser.parse_args()
+    
 
     if args.nuitka:
         pybuilder = 1
     else:
         pybuilder = 0
-    
+    builder = 0
+    if args.mingw:
+        builder = 0
+    elif args.msvc:
+        builder = 1
     profile = 0 if args.type == "release" else 1
     bmode = args.nuitka if args.nuitka else "pyinstaller"
 
-    sys.exit(main(pybuilder, profile, bmode))
+    sys.exit(main(pybuilder, profile, bmode, builder))

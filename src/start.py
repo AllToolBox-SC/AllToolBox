@@ -53,7 +53,7 @@ style = Style.from_dict({
     "yellow": "fg:#f1c40f",
     "red": "fg:#ff7b7b",
     "orange": "fg:#f4a261",
-    "info": "fg:#9dcffb",
+    "info": "fg:#3B78FF",
     "black": "fg:#0c1118",
     "cyan": "fg:#67e0c2",
     "green": "fg:#7ad1a8",
@@ -71,6 +71,7 @@ warn = "<orange>[警告]</orange>"
 
 flag = False
 key = False
+started = False
 
 LINE = "-" * 68
 DEBUG = os.getenv("ATB_DEBUG_MODE", "0") == "1"
@@ -406,7 +407,7 @@ def run(cmd):
                     set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; &
                     @{cmd} &
                     endlocal 1>nul 2>nul &
-                    '''.replace("\n", "").replace(20*" ", "")], shell=True)
+                    '''.replace("\n", "").replace(20*" ", "")])
 
 @onerror
 def appset():
@@ -868,7 +869,7 @@ def pre_main() -> bool:
     atb_path_env = clean_env_value(os.getenv("ATB_PATH"))
     atb_path_reg = clean_env_value(get_env_variable("ATB_PATH"))
     atb_path = atb_path_env or atb_path_reg
-    path_v = os.getenv("PATH") or ""
+    path_v = get_env_variable("PATH", True) or ""
     path_updated = False
 
     def norm_path(p: str) -> str:
@@ -1077,6 +1078,7 @@ def main() -> int:
 
         pre = pre_main() if not flag else True
         if not pre: return 1
+        clear()
         run("call logo")
         result = menu()
         match result:

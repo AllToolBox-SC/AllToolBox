@@ -28,3 +28,8 @@ source/
 /as_err.txt
 /as_out.txt
 .venv312/
+/launch.obj
+/双击运行.obj
+/build.obj
+*.obj
+*.o

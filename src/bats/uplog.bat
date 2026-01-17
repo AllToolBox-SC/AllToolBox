@@ -1,21 +1,7 @@
-@echo off
-call .\color
-setlocal enabledelayedexpansion
-
-ECHO.%INFO%脚本版本为1.2.9%RESET%
+ECHO.%INFO%脚本版本为1.3.4%RESET%
 ECHO.%INFO%更新日志：%RESET%
-ECHO.%INFO%1.修复“断点续刷”后无法修补boot的问题%RESET%
-ECHO.%INFO%2.提升临时环境变量优先级%RESET%
-ECHO.%INFO%3.添加9008引导与刷入时错误拦截和错误回显%RESET%
-ECHO.%INFO%4.优化局部变量的代码%RESET%
-ECHO.%INFO%5.在进入qmmi功能中加入z10%RESET%
-ECHO.%INFO%6.优化与修复一键root%RESET%
-ECHO.%INFO%7.增加备份相册%RESET%
-ECHO.%INFO%8.增加7.1.1和4.4.4安装xp框架%RESET%
-ECHO.%INFO%9.增加更多安装应用方式%RESET%
-ECHO.%INFO%10.新增/更新8.1机型Root后优化[原生修复]%RESET%
-ECHO.%INFO%11.修复自动激活systemplus%RESET%
-ECHO.%INFO%12.实装新版主菜单，使用时遇到问题请反馈%RESET%
-ECHO.%INFO%13.编译时添加g++编译参数-O3，改用Nuitka编译Python部分并启用lto优化取代PyInstaller，让渣机也能流畅运行%RESET%
-ECHO.%INFO%14.logo改为rust-lolcat输出，渐变更加美观%RESET%
-ECHO.%INFO%15.修复了双击运行弹窗乱码的问题%RESET%
+ECHO.%INFO%1.z10一键root，正式可用[已测试]%RESET%
+ECHO.%INFO%2.增加beta版本%RESET%
+ECHO.%INFO%3.去除无用内容%RESET%
+ECHO.%INFO%4.优化菜单和更新补丁%RESET%
+ECHO.%INFO%5.修复部分机型新修补无法正常修补boot的问题%RESET%

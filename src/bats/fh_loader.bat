@@ -1,8 +1,9 @@
 :run
-fh_loader.exe %1 %2 %3 %4 %5 %6 %7 %8 %9 >FHtmp.txt || goto error
-
+fh_loader.exe %* >FHtmp.txt || goto error
+exit /b
 :error
-copy /Y .\FHtmp.txt .\Errorlog\FHerror_%date%_%time%.txt
-set /p FHtmp=%error%璇诲彇鎴栧埛鍏ュけ璐ワ紒[杈撳叆"l"杈撳嚭鏃ュ織]鎸変换鎰忛敭閲嶆柊灏濊瘯...
-if "FHtmp"=="l" type FHtmp.txt & echo.鎸変换鎰忛敭閲嶈瘯... & pause >nul
+copy /Y .\FHtmp.txt .\Errorlog\FHerror_%RANDOM%%RANDOM%.txt >nul
+set FHtmp=""
+set /p FHtmp=%error%9008读取或刷入失败！[输入"log"输出日志]按任意键重新尝试...
+if "%FHtmp%"=="log" type FHtmp.txt & echo.按任意键重试... & pause >nul
 goto run

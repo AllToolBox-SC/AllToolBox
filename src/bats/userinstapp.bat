@@ -51,7 +51,7 @@ device_check.exe adb&&ECHO.
 ECHO.
 
 echo %INFO% 正在安装应用...%RESET%
-set /p instmod=<instmod.txt
+if exist .\instmod.txt set /p instmod=<instmod.txt
 call instapp %sel__file_path% %instmod%
 
 echo.
@@ -87,11 +87,11 @@ set FAILED=0
 
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
-set /p instmod=<instmod.txt
+if exist .\instmod.txt set /p instmod=<instmod.txt
 for %%i in (%sel__files:/= %) do (
     echo.
     echo %CYAN%正在安装: %%~nxi%RESET%
-    call instapp %%i %instmod%
+    call instapp "%%i" !instmod!
 )
 
 echo.
@@ -135,7 +135,7 @@ set FAILED=0
 
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
-set /p instmod=<instmod.txt
+if exist .\instmod.txt set /p instmod=<instmod.txt
 for /l %%n in (1,1,!COUNT!) do (
     set "file=!FILE_%%n!"
     for %%A in ("!file!") do (
@@ -143,7 +143,7 @@ for /l %%n in (1,1,!COUNT!) do (
     )
     echo.
     echo %CYAN%正在安装: !filename!%RESET%
-    call instapp !file! %instmod%
+    call instapp "!file!" !instmod!
 )
 
 echo.
@@ -210,10 +210,15 @@ ECHO.%RESET%
 set /p MENU=%YELLOW%请输入序号并按下回车键：%RESET%
 if "%MENU%"=="A" goto MAIN_MENU
 if "%MENU%"=="a" goto MAIN_MENU
-if "%MENU%"=="1" set /p="install" <nul > instmod.txt & goto INSTALL_MOD
-if "%MENU%"=="2" set /p="data" <nul > instmod.txt & goto INSTALL_MOD
-if "%MENU%"=="3" set /p="3install" <nul > instmod.txt & goto INSTALL_MOD
-if "%MENU%"=="4" set /p="create" <nul > instmod.txt & goto INSTALL_MOD
+if "%MENU%"=="1" set /p="install" <nul > instmod.txt & goto INSTALL_MOD_d
+if "%MENU%"=="2" set /p="data" <nul > instmod.txt & goto INSTALL_MOD_d
+if "%MENU%"=="3" set /p="3install" <nul > instmod.txt & goto INSTALL_MOD_d
+if "%MENU%"=="4" set /p="create" <nul > instmod.txt & goto INSTALL_MOD_d
 ECHO %ERROR%输入错误，请重新输入！%RESET%
+timeout /t 2 >nul
+goto INSTALL_MOD
+
+:INSTALL_MOD_d
+echo %GREEN%修改安装方式成功%RESET%
 timeout /t 2 >nul
 goto INSTALL_MOD

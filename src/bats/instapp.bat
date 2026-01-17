@@ -1,20 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
-set args1=%1
-set args2=%2
-set args3=%3
+set args1=%~1
+set args2=%~2
+set args3=%~3
 :callinst
 echo %CYAN%正在安装：%RESET%%PINK%%args1%%RESET%
 REM 创建临时目录
 if not exist ".\tmp" mkdir ".\tmp"
 REM 执行安装并将输出重定向到临时文件
-if "%args2%"=="" adb wait-for-device install -r -t -d --no-streaming "%args1%" > ".\tmp\instapptmp.txt"
-if "%args2%"=="install" adb wait-for-device install -r -t -d --no-streaming "%args1%" > ".\tmp\instapptmp.txt"
+if "%args2%"=="nostreaming" adb wait-for-device install -r -t -d --no-streaming "%args1%" > ".\tmp\instapptmp.txt"
+if "%args2%"=="install" adb wait-for-device install -r -t -d "%args1%" > ".\tmp\instapptmp.txt"
 if "%args2%"=="data" goto data
 if "%args2%"=="create" goto create
 if "%args2%"=="3install" goto 3install
+adb wait-for-device install -r -t -d "%args1%" > ".\tmp\instapptmp.txt"
 :instfind
 REM 检查输出中是否包含Success
+if not exist ".\tmp\instapptmp.txt" %ERROR%发生错误，没有任何安装命令被调用，请检查语法是否正确 & goto error
 find /i "Success" "%cd%\tmp\instapptmp.txt" >nul
 if !errorlevel! equ 0 (
     echo %GREEN% 安装成功！%RESET%
@@ -89,26 +91,20 @@ REM 检查是否需要重启包管理器或系统
 echo.
 echo %YELLOW% data/app安装方式可能需要重启应用包管理器或系统才能生效%RESET%
 echo %YELLOW%请选择操作：
-echo 1. 重启应用包管理器[推荐]
-echo 2. 重启设备
-echo 3. 不执行任何操作
+echo 1. 重启设备[推荐]
+echo 2. 不执行任何操作
 set /p RESTART_CHOICE=%YELLOW%请输入序号并按下回车键(默认1): %RESET%
 
 if "!RESTART_CHOICE!"=="" set "RESTART_CHOICE=1"
 
 if "!RESTART_CHOICE!"=="1" (
-    echo %INFO% 重启应用包管理器...%RESET%
-    adb shell su -c "am force-stop com.android.packageinstaller" >nul 2>&1
-    echo %GREEN% 应用包管理器已重启%RESET%
-    echo %INFO% 等待5秒钟让系统识别新应用%RESET%
-    busybox sleep 5
-)
-if "!RESTART_CHOICE!"=="2" (
     echo %INFO% 正在重启设备...%RESET%
     adb reboot
     device_check.exe adb&&ECHO.
 )
-echo %INFO% 未执行任何操作，应用可能需要重启设备才能生效%RESET%
+if "!RESTART_CHOICE!"=="2" (
+    echo %INFO% 未执行任何操作，应用可能需要重启设备才能生效%RESET%
+)
 
 REM 清理临时文件
 adb shell su -c "rm -f /data/local/tmp/!APK_NAME!" >nul 2>&1

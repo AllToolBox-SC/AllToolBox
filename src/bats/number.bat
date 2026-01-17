@@ -1,11 +1,11 @@
-::call number [æ–‡ä»¶] [è¾“å‡ºå˜é‡]
+::call number [ÎÄ¼ş] [Êä³ö±äÁ¿]
 
 @echo off
 setlocal enabledelayedexpansion
 
 set "file_path=%1"
 set "chown="
-if not exist .\%file_path% echo.%ERROR%æ‰¾ä¸åˆ°æŒ‡å®šæ–‡ä»¶ & pause & exit /b
+if not exist .\%file_path% echo.%ERROR%ÕÒ²»µ½Ö¸¶¨ÎÄ¼ş & pause & exit /b
 
 if exist "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" (
     for /f "delims=" %%a in ('powershell -Command "Get-Content '%file_path%' | Select-String -Pattern '\d+' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value }"') do (

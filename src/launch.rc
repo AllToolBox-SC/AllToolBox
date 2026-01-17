@@ -1,2 +1,6 @@
+
+#ifdef _WIN32
+#include <winuser.h>
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "uac.manifest"
+#endif
 1 ICON "launch.ico"
-1 24 "uac.manifest"

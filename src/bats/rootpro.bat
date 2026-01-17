@@ -116,12 +116,12 @@ ECHO.%INFO%正在启动投屏！如手表端不方便操作，可在电脑端进行操作
 ECHO.%INFO%提示：如果手表息屏，在投屏窗口单击右键即可
 start scrcpy-noconsole.vbs
 run_cmd "adb shell ""su -c am start -n com.huanli233.systemplus/.ActiveSelfActivity"""
-ECHO.%INFO%请往下滑，找到自激活，然后点击激活SystemPlus与激活核心破解，然后按任意键继续
+ECHO.%INFO%请往下滑，找到自激活，然后点击激活SystemPlus，然后按任意键继续
 pause
 :xposed-check
 run_cmd "adb push systemplus.sh /sdcard/systemplus.sh"
 ECHO.%INFO%开始检查SystemPlus激活状态...
-for /f "delims=" %%i in ('adb wait-for-device shell sh /sdcard/systemplus.sh') do set systemplus=%%i
+for /f "delims=" %%i in ('adb wait-for-device shell su -c sh /sdcard/systemplus.sh') do set systemplus=%%i
 if "%systemplus%"=="1" (
     ECHO.%ERROR%未激活
     ECHO.%ERROR%没有激活SystemPlus！按任意键重回上一步

@@ -53,7 +53,7 @@ call edlport
 QSaharaServer.bat -p \\.\COM%chkdev__edl__port% -s 13:%cd%\EDL\%whatmbn%
 :noQS
 call edlport
-qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt >nul
+call qfh_loader.bat --port=\\.\COM%chkdev__edl__port% --memoryname=EMMC --search_path=EDL\ --sendxml=reboot.xml --noprompt
 ECHO %INFO%完成！，按任意键继续%RESET%
 pause >nul
 goto rebootP
