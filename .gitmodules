@@ -1,0 +1,3 @@
+[submodule "src/FileDialog"]
+	path = src/FileDialog
+	url = https://github.com/LesFerch/FileDialog.git
