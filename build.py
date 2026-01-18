@@ -394,10 +394,10 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
 
         bar.set_description("Building FileDialog")
         run_step(
-            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=./build/FileDialog/obj/"],
+            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
             bar
         ) if profile == 0 else run_step(
-            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=./build/FileDialog/obj/"],
+            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
             bar
         )
 
