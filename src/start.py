@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import argparse
 import os
 import sys
 import shutil
@@ -130,6 +131,25 @@ class Option:
     def __init__(self, value, label):
         self.value = value
         self.label = label
+
+
+def parse_cli_args():
+    """Lightweight CLI to trigger a specific menu action without interaction."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--action",
+        choices=[
+            "root", "openshell", "about", "mods", "commonly",
+            "help-links", "man-apps", "magisk-mod", "user-debug"
+        ],
+        help="直接执行指定菜单项后退出 (例如 --action root)",
+    )
+    parser.add_argument("--skip-pre", action="store_true", help="跳过启动自检(仅调试用)")
+    args, _ = parser.parse_known_args()
+    return args
+
+
+CLI_ARGS = parse_cli_args()
 
 def menu_choice(
     message: str,
@@ -1075,11 +1095,37 @@ def main() -> int:
     global key
     global style
     try:
+        def handle_action(action: str) -> None:
+            match action:
+                case "root":
+                    clear(); run("call root.bat"); clear()
+                case "openshell":
+                    clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
+                case "about": about()
+                case "mods": mod()
+                case "commonly": commonly()
+                case "user-debug": userdebug()
+                case "man-apps": appset()
+                case "magisk-mod": magisk()
+                case "help-links": help_menu()
+                case _:
+                    pass
 
-        pre = pre_main() if not flag else True
-        if not pre: return 1
+        # CLI interface has highest priority: run requested action first, with optional pre-checks.
+        if CLI_ARGS.action:
+            if not CLI_ARGS.skip_pre and not flag:
+                pre_ok = pre_main()
+                if not pre_ok:
+                    return 1
+            handle_action(CLI_ARGS.action)
+            return 0
+
+        pre_ok = True if CLI_ARGS.skip_pre else (pre_main() if not flag else True)
+        if not pre_ok:
+            return 1
         clear()
         run("call logo")
+
         result = menu()
         match result:
             case "SHIFT_D": debug()
