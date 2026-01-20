@@ -16,9 +16,6 @@ path = "src/lolcat.rs"
 name = "jsonutil"
 path = "src/jsonutil.rs"
 
-[[build]]
-target-dir = "build/rust"
-
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 

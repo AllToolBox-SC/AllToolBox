@@ -171,6 +171,15 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         print("UPX not found, skipping UPX compression (set UPX_DIR to enable).")
     rust_toolset = get_rust_target_triple()
     print(f"Rust target triple: {rust_toolset}")
+    dotnet_hint_dirs: list[str] = []
+    dotnet_root = os.getenv("DOTNET_ROOT")
+    if dotnet_root:
+        dotnet_hint_dirs.append(dotnet_root)
+        dotnet_hint_dirs.append(os.path.join(dotnet_root, "sdk"))
+    dotnet_exe = resolve_tool(["dotnet.exe", "dotnet"], extra_dirs=dotnet_hint_dirs)
+    if not dotnet_exe:
+        raise RuntimeError("dotnet SDK not found. Install .NET SDK (x64) and set DOTNET_ROOT if needed.")
+    print(f"Using dotnet: {dotnet_exe}")
     extra_bins = []
     for env_name in ("MINGW64_BIN", "MSYS2_MINGW64_BIN"):
         v = os.getenv(env_name)
@@ -620,10 +629,10 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
 
         bar.set_description("Building FileDialog")
         run_step(
-            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
+            [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
             bar
         ) if profile == 0 else run_step(
-            ["dotnet.exe", "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
+            [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
             bar
         )
 
