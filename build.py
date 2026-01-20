@@ -424,6 +424,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         "nuitka run_cmd",
         "nuitka repair",
         "nuitka start",
+        "nuitka check",
         "cargo",
         "extract",
     ]
@@ -546,6 +547,14 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
+
+                bar.set_description("check.py -> check.exe")
+                run_step(
+                    [python_exe, "-m", "nuitka",
+                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                    "src/check.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                    bar
+                )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
@@ -570,6 +579,14 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
                 )
+
+                bar.set_description("check.py -> check.exe")
+                run_step(
+                    [python_exe, "-m", "nuitka",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                    "src/check.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                    bar
+                )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
@@ -591,6 +608,12 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
+
+                bar.set_description("check.py -> check.exe")
+                run_step(
+                    pyinstaller_cmd(python_exe, "src/check.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
+                    bar
+                )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
@@ -607,6 +630,12 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
+                    bar
+                )
+
+                bar.set_description("check.py -> check.exe")
+                run_step(
+                    pyinstaller_cmd(python_exe, "src/check.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
                 
@@ -663,6 +692,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         "run_cmd": ["run_cmd"],
         "start": ["main", "start"],
         "repair": ["repair"],
+        "check": ["check"],
     }
 
     missing = []
@@ -684,6 +714,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
     shutil.copy2(outputs["repair"], "./build/main/bin/repair.exe")
+    shutil.copy2(outputs["check"], "./build/main/bin/check.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe", "./build/main/bin/FileDialog.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe.config", "./build/main/bin/FileDialog.exe.config")
 
