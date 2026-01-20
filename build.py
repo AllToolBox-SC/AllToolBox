@@ -12,6 +12,19 @@ import colorama
 from tqdm import tqdm
 
 
+def pick_python_exe():
+    """Choose python executable preferring .venv312, then .venv, then current."""
+    candidates = [
+        os.path.join("./.venv312", "Scripts", "python.exe"),
+        os.path.join("./.venv", "Scripts", "python.exe"),
+        sys.executable,
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return sys.executable
+
+
 
 def onerror(func):
     def handler(*args, **kwargs):
@@ -51,8 +64,9 @@ def find_upx_dir():
     return None
 
 @onerror
-def pyinstaller_cmd(script: str, dist: str, debug: bool, upx_dir: str | None):
-    cmd = [os.path.join("./.venv", "Scripts", "pyinstaller.exe"), "--onefile", "--distpath", dist]
+def pyinstaller_cmd(python_exe: str, script: str, dist: str, debug: bool, upx_dir: str | None):
+    # Use python -m PyInstaller to honor selected interpreter.
+    cmd = [python_exe, "-m", "PyInstaller", "--onefile", "--distpath", dist]
     if upx_dir:
         cmd.append(f"--upx-dir={upx_dir}")
     if debug:
@@ -143,7 +157,7 @@ def run_step(cmd, bar, **kwargs):
 
 
 @onerror
-def main(python_builder: int, profile: int, bmode: str, builder: int):
+def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None):
     print("Build script running...")
     print("Release build") if profile == 0 else print("Debug Build")
     os.environ["PYTHONUTF8"] = "1"
@@ -162,7 +176,181 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
         v = os.getenv(env_name)
         if v:
             extra_bins.append(v)
+    if mingw_bin_override:
+        extra_bins.append(mingw_bin_override)
     extra_bins.append(r"E:\mingw64\bin")
+    if msvc_bin_override:
+        extra_bins.append(msvc_bin_override)
+    if winsdk_dir:
+        extra_bins.append(winsdk_dir)
+
+    # Resolve Windows SDK include root automatically if not provided.
+    include_parts: list[str] = []
+    resolved_winsdk_include = winsdk_include
+    if not resolved_winsdk_include and winsdk_dir:
+        # If winsdk_dir looks like .../bin/<ver>/<arch>, map to ../Include/<ver>
+        arch_dir = os.path.basename(winsdk_dir.rstrip("/\\"))
+        ver_dir = os.path.basename(os.path.dirname(winsdk_dir.rstrip("/\\")))
+        bin_parent = os.path.dirname(os.path.dirname(winsdk_dir.rstrip("/\\")))
+        candidate = os.path.join(bin_parent, "Include", ver_dir)
+        if os.path.isdir(candidate):
+            resolved_winsdk_include = candidate
+    if not resolved_winsdk_include:
+        sdk_root = os.getenv("WindowsSdkDir")
+        sdk_ver = os.getenv("WindowsSdkVer")
+        if sdk_root and sdk_ver:
+            candidate = os.path.join(sdk_root, "Include", sdk_ver.strip("\\/"))
+            if os.path.isdir(candidate):
+                resolved_winsdk_include = candidate
+
+    if resolved_winsdk_include:
+        # Prepend provided/derived include roots and common subfolders so rc/cl can find Windows SDK headers.
+        include_parts = [resolved_winsdk_include]
+        for sub in ("ucrt", "shared", "um", "winrt", "cppwinrt"):
+            candidate = os.path.join(resolved_winsdk_include, sub)
+            if os.path.isdir(candidate):
+                include_parts.append(candidate)
+
+    # Collect MSVC include/lib paths (needed for std headers and link libs)
+    vc_include_parts: list[str] = []
+    vc_lib_parts: list[str] = []
+    vc_tools_dir = None
+
+    if msvc_bin_override:
+        # Derive MSVC tools root and include from a bin path like .../MSVC/<ver>/bin/Hostx64/x64
+        bin_root = os.path.normpath(msvc_bin_override)
+        maybe_tools_root = os.path.normpath(os.path.join(bin_root, os.pardir, os.pardir, os.pardir))
+        if os.path.isdir(maybe_tools_root):
+            vc_tools_dir = maybe_tools_root
+            candidate = os.path.join(maybe_tools_root, "include")
+            if os.path.isdir(candidate):
+                vc_include_parts.append(candidate)
+            lib_candidate = os.path.join(maybe_tools_root, "lib", "x64")
+            if os.path.isdir(lib_candidate):
+                vc_lib_parts.append(lib_candidate)
+
+    if not vc_tools_dir:
+        vc_tools_dir = os.getenv("VCToolsInstallDir")
+    if vc_tools_dir and not vc_include_parts:
+        candidate = os.path.join(vc_tools_dir, "include")
+        if os.path.isdir(candidate):
+            vc_include_parts.append(candidate)
+        lib_candidate = os.path.join(vc_tools_dir, "lib", "x64")
+        if os.path.isdir(lib_candidate):
+            vc_lib_parts.append(lib_candidate)
+    if not vc_include_parts:
+        vc_install = os.getenv("VCINSTALLDIR")
+        if vc_install:
+            candidate = os.path.join(vc_install, "include")
+            if os.path.isdir(candidate):
+                vc_include_parts.append(candidate)
+        else:
+            vs_install = os.getenv("VSINSTALLDIR")
+            if vs_install:
+                tools_root = os.path.join(vs_install, "VC", "Tools", "MSVC")
+                if os.path.isdir(tools_root):
+                    # Pick latest version folder
+                    versions = sorted([d for d in os.listdir(tools_root) if os.path.isdir(os.path.join(tools_root, d))], reverse=True)
+                    for ver in versions:
+                        candidate = os.path.join(tools_root, ver, "include")
+                        if os.path.isdir(candidate):
+                            vc_include_parts.append(candidate)
+                            lib_candidate = os.path.join(tools_root, ver, "lib", "x64")
+                            if os.path.isdir(lib_candidate):
+                                vc_lib_parts.append(lib_candidate)
+                            break
+
+    if not vc_include_parts:
+        # Fallback: probe common VS install locations for latest MSVC include (2022/2019, x86 and x64 roots)
+        pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        pf = os.environ.get("ProgramW6432", r"C:\Program Files")
+        vs_years = ("2022", "2019")
+        editions = ("BuildTools", "Community", "Professional", "Enterprise")
+        for root_base in (pf86, pf):
+            for year in vs_years:
+                for edition in editions:
+                    tools_root = os.path.join(root_base, "Microsoft Visual Studio", year, edition, "VC", "Tools", "MSVC")
+                    if not os.path.isdir(tools_root):
+                        continue
+                    versions = sorted([d for d in os.listdir(tools_root) if os.path.isdir(os.path.join(tools_root, d))], reverse=True)
+                    for ver in versions:
+                        candidate = os.path.join(tools_root, ver, "include")
+                        if os.path.isdir(candidate):
+                            vc_include_parts.append(candidate)
+                            lib_candidate = os.path.join(tools_root, ver, "lib", "x64")
+                            if os.path.isdir(lib_candidate):
+                                vc_lib_parts.append(lib_candidate)
+                            break
+                    if vc_include_parts:
+                        break
+                if vc_include_parts:
+                    break
+            if vc_include_parts:
+                break
+
+    # Resolve Windows SDK lib paths (ucrt/um)
+    sdk_lib_parts: list[str] = []
+    if resolved_winsdk_include:
+        # resolved_winsdk_include = .../Windows Kits/10/Include/<ver>
+        version_dir = os.path.basename(resolved_winsdk_include)
+        kits_root = os.path.dirname(os.path.dirname(resolved_winsdk_include))  # .../Windows Kits/10
+        sdk_lib_base = os.path.join(kits_root, "Lib", version_dir)
+        for sub in (os.path.join("ucrt", "x64"), os.path.join("um", "x64")):
+            candidate = os.path.join(sdk_lib_base, sub)
+            if os.path.isdir(candidate):
+                sdk_lib_parts.append(candidate)
+
+    # Fallback: allow searching MinGW/MSYS2 headers only if no MSVC headers were found
+    mingw_include_parts: list[str] = []
+    have_msvc_includes = bool(vc_include_parts or msvc_include_override)
+    if not have_msvc_includes:
+        for env_name in ("MINGW64_BIN", "MSYS2_MINGW64_BIN"):
+            mingw_bin = os.getenv(env_name)
+            if not mingw_bin:
+                continue
+            mingw_root = os.path.dirname(mingw_bin.rstrip("/\\"))
+            for inc in (
+                os.path.join(mingw_root, "include"),
+                os.path.join(mingw_root, "x86_64-w64-mingw32", "include"),
+            ):
+                if os.path.isdir(inc):
+                    mingw_include_parts.append(inc)
+        if mingw_bin_override:
+            mingw_root = os.path.dirname(mingw_bin_override.rstrip("/\\"))
+            for inc in (
+                os.path.join(mingw_root, "include"),
+                os.path.join(mingw_root, "x86_64-w64-mingw32", "include"),
+            ):
+                if os.path.isdir(inc):
+                    mingw_include_parts.append(inc)
+
+    # Override MSVC include if explicitly provided
+    if msvc_include_override:
+        include_parts.append(msvc_include_override)
+    include_parts.extend(vc_include_parts)
+    if not have_msvc_includes:
+        include_parts.extend(mingw_include_parts)
+    if include_parts:
+        include_chain = ";".join(include_parts)
+        os.environ["INCLUDE"] = f"{include_chain};{os.environ.get('INCLUDE', '')}"
+
+    # Assemble LIB paths
+    lib_parts: list[str] = []
+    lib_parts.extend(vc_lib_parts)
+    lib_parts.extend(sdk_lib_parts)
+    if lib_parts:
+        lib_chain = ";".join(lib_parts)
+        os.environ["LIB"] = f"{lib_chain};{os.environ.get('LIB', '')}"
+
+    # Log resolved include/lib paths once for debugging rc/cl/linker lookup
+    if include_parts:
+        print("Resolved INCLUDE paths for rc/cl:")
+        for p in include_parts:
+            print(f"  {p}")
+    if lib_parts:
+        print("Resolved LIB paths for linker:")
+        for p in lib_parts:
+            print(f"  {p}")
 
     windres = resolve_tool(["windres.exe", "windres"], extra_bins) if builder == 0 else True
     gxx = resolve_tool(["g++.exe", "g++"], extra_bins) if builder == 0 else True
@@ -171,6 +359,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
     cargo = resolve_tool(["cargo.exe", "cargo"], extra_bins)
     cl = resolve_tool(["cl.exe", "cl"], extra_bins) if builder == 1 else True
     rc = resolve_tool(["rc.exe", "rc"], extra_bins) if builder == 1 else True
+    cvtres = resolve_tool(["cvtres.exe", "cvtres"], extra_bins) if builder == 1 else True
     missing = []
     if builder == 0 or bmode == "mingw":
         if not windres:
@@ -184,6 +373,8 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
             missing.append("cl.exe (MSVC toolchain)")
         if not rc:
             missing.append("rc.exe (Windows SDK)")
+        if not cvtres:
+            missing.append("cvtres.exe (MSVC toolchain)")
     if not cargo:
         missing.append("cargo.exe (Rust toolchain)")
     if not dotnet:
@@ -210,8 +401,12 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
     os.makedirs("./build/main/bin", exist_ok=True)
     os.makedirs("./build/rust", exist_ok=True)
 
-    if not os.path.exists("./.venv/Scripts/python.exe"):
-        venv.create("./.venv", with_pip=True)
+    python_exe = pick_python_exe()
+    print(f"Using Python: {python_exe}")
+
+    if not (os.path.exists("./.venv312/Scripts/python.exe") or os.path.exists("./.venv/Scripts/python.exe")):
+        venv.create("./.venv312", with_pip=True)
+        python_exe = os.path.join("./.venv312", "Scripts", "python.exe")
 
     steps = [
         "windres",
@@ -259,26 +454,57 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
             )
         elif builder == 1:
             bar.set_description("Generating ICON Source")
+            rc_include_flags = []
+            for p in include_parts:
+                # Pack /I with the path (quoted when needed) as a single arg so spaces are handled.
+                rc_include_flags.append(f"/I\"{p}\"") if " " in p else rc_include_flags.append(f"/I{p}")
+            rc_path = rc
+            if not rc_path and msvc_bin_override:
+                candidate = os.path.join(msvc_bin_override, "rc.exe")
+                if os.path.isfile(candidate):
+                    rc_path = candidate
+            if not rc_path:
+                rc_path = "rc.exe"
+            print(f"Using rc: {rc_path}")
             run_step(
-                ["rc.exe", "/fo", "build\\icon.res", "src\\launch.rc"],
+                [rc_path, "/nologo", "/fo", "build\\icon.res", *rc_include_flags, "src\\launch.rc"],
                 bar
             )
+            cvtres_path = cvtres
+            if not cvtres_path and msvc_bin_override:
+                candidate = os.path.join(msvc_bin_override, "cvtres.exe")
+                if os.path.isfile(candidate):
+                    cvtres_path = candidate
+            if not cvtres_path:
+                cvtres_path = "cvtres.exe"
+            print(f"Using cvtres: {cvtres_path}")
             run_step(
-                ["cvtres.exe", "/out:build\\icon.obj", "build\\icon.res"],
+                [cvtres_path, "/out:build\\icon.obj", "build\\icon.res"],
                 bar
             )
             bar.set_description("Building launcher")
+            cl_path = cl
+            if not cl_path and msvc_bin_override:
+                candidate = os.path.join(msvc_bin_override, "cl.exe")
+                if os.path.isfile(candidate):
+                    cl_path = candidate
+            if not cl_path:
+                cl_path = "cl.exe"
+            print(f"Using cl: {cl_path}")
+            lib_flags = []
+            for lp in lib_parts:
+                lib_flags.append(f"/LIBPATH:{lp}")
             run_step(
-                ["cl.exe", "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", "advapi32.lib", "user32.lib", "shell32.lib"],
+                [cl_path, "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
                 bar
             ) if profile == 0 else run_step(
-                ["cl.exe", "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", "advapi32.lib", "user32.lib", "shell32.lib"],
+                [cl_path, "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
                 bar
             )
 
         bar.set_description("Installing requirements")
         run_step(
-            [os.path.join("./.venv", "Scripts", "pip.exe"), "install", "-r", "requirements.txt"],
+            [python_exe, "-m", "pip", "install", "-r", "requirements.txt"],
             bar
         )
 
@@ -298,7 +524,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
             if profile == 0:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist"
                     "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
@@ -306,7 +532,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
@@ -314,7 +540,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
                     "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
@@ -322,7 +548,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
             else:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
@@ -330,7 +556,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
@@ -338,7 +564,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    [os.path.join("./.venv", "Scripts", "python.exe"), "-m", "nuitka",
+                    [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
                     "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
                     bar
@@ -347,37 +573,37 @@ def main(python_builder: int, profile: int, bmode: str, builder: int):
             if profile == 0:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    pyinstaller_cmd("src/run_cmd.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    pyinstaller_cmd("src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    pyinstaller_cmd("src/start.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/start.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
                     bar
                 )
             else:
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
-                    pyinstaller_cmd("src/run_cmd.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
-                    pyinstaller_cmd("src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
-                    pyinstaller_cmd("src/start.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
+                    pyinstaller_cmd(python_exe, "src/start.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
 
@@ -526,6 +752,36 @@ if __name__ == "__main__":
         action="store_true",
         help="Use MSVC compiler for cpps (Please ensure MSVC is properly set up in your environment)"
     )
+    parser.add_argument(
+        "--winsdk-dir",
+        type=str,
+        default=None,
+        help="Windows SDK bin directory containing rc.exe (e.g. C:/Program Files (x86)/Windows Kits/10/bin/10.0.xxxxx.x/x64)"
+    )
+    parser.add_argument(
+        "--winsdk-include",
+        type=str,
+        default=None,
+        help="Windows SDK include directory (e.g. C:/Program Files (x86)/Windows Kits/10/Include/10.0.xxxxx.x)"
+    )
+    parser.add_argument(
+        "--mingw-bin",
+        type=str,
+        default=None,
+        help="Override MinGW bin directory (used for tool detection and include fallback)"
+    )
+    parser.add_argument(
+        "--msvc-bin",
+        type=str,
+        default=None,
+        help="Override MSVC bin/tools directory (used for tool detection when using /msvc)"
+    )
+    parser.add_argument(
+        "--msvc-include",
+        type=str,
+        default=None,
+        help="Override MSVC include directory (used to resolve std headers like stdarg.h)"
+    )
     colorama.init(autoreset=True)
     args = parser.parse_args()
     
@@ -542,4 +798,4 @@ if __name__ == "__main__":
     profile = 0 if args.type == "release" else 1
     bmode = args.nuitka if args.nuitka else "pyinstaller"
 
-    sys.exit(main(pybuilder, profile, bmode, builder))
+    sys.exit(main(pybuilder, profile, bmode, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include))
