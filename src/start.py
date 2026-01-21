@@ -2,7 +2,6 @@
 
 import logging
 import argparse
-import menu
 import os
 import sys
 import shutil
@@ -67,9 +66,6 @@ style = Style.from_dict({
     "selected-option": "fg:#e6edf3 bold underline",
 })
 
-# Propagate style to shared menu utilities
-menu.set_default_style(style)
-
 info = "<info>[信息]</info>"
 error = "<red>[错误]</red>"
 warn = "<orange>[警告]</orange>"
@@ -111,7 +107,10 @@ def page_transition(text: str = "", duration: float = 0.35) -> None:
 
 # session = subprocess.Popen(["cmd.exe"], shell=True)
 
-Option = Tuple[str, str]
+class Option:
+    def __init__(self, value, label):
+        self.value = value
+        self.label = label
 
 def onerror(fn):
     def wrapper(*args, **kwargs):
@@ -150,18 +149,190 @@ def parse_cli_args():
 CLI_ARGS = parse_cli_args()
 
 
-def resolve_requested_action() -> str | None:
-    """Priority: XML config (ATB_MENU_XML or menu_action.xml) > CLI action."""
-    xml_path = os.getenv("ATB_MENU_XML")
-    action = menu.resolve_action_with_xml(xml_path)
-    if action:
-        return action
-    if CLI_ARGS.action:
-        return CLI_ARGS.action
-    return None
+def menu_choice(
+    message: str,
+    options: Iterable[tuple],
+    default: str | None = None,
+    style_override: Style | None = None,
+    extra_bindings: KeyBindings | None = None,
+):
+    option_list: List[tuple] = list(options)
+    if not option_list:
+        raise ValueError("menu_choice requires at least one option")
+
+    selected_index = 0
+    display_index = 0
+    animate_in = True
+    visible_count = 0 if animate_in else len(option_list)
+    move_task = None
+
+    if default is not None:
+        for idx, (value, _) in enumerate(option_list):
+            if value == default:
+                selected_index = idx
+                display_index = idx
+                break
+
+    kb = KeyBindings()
+
+    @kb.add("enter", eager=True)
+    @kb.add(" ", eager=True)
+    def _(event):
+        idx = selected_index or 0
+        event.app.exit(result=option_list[idx][0])
+
+    digit_buf = {"text": "", "t": 0.0}
+
+    def _select_by_number(event, digit: str) -> None:
+        now = time.monotonic()
+        if now - digit_buf["t"] > 0.2:
+            digit_buf["text"] = ""
+        digit_buf["text"] += digit
+        digit_buf["t"] = now
+        try:
+            idx = int(digit_buf["text"]) - 1
+        except ValueError:
+            return
+        if 0 <= idx < len(option_list):
+            _set_selection(idx, event.app)
+
+    for d in "0123456789":
+        @kb.add(d, eager=True)
+        def _(event, _d=d):
+            _select_by_number(event, _d)
+
+    def _clamp(idx: int) -> int:
+        count = len(option_list)
+        return max(0, min(count - 1, idx))
+
+    def _animate_move(target: int, app):
+        nonlocal display_index, move_task
+        if move_task and not move_task.done():
+            move_task.cancel()
+
+        async def _run():
+            nonlocal display_index
+            while display_index != target:
+                step = 1 if display_index < target else -1
+                display_index += step
+                app.invalidate()
+                await asyncio.sleep(0.02)
+            app.invalidate()
+
+        move_task = app.create_background_task(_run())
+
+    def _set_selection(idx: int, app):
+        nonlocal selected_index, display_index
+        selected_index = _clamp(idx)
+        _animate_move(selected_index, app)
+
+    @kb.add("up")
+    @kb.add("k")
+    def _(event):
+        _set_selection(selected_index - 1, event.app)
+
+    @kb.add("down")
+    @kb.add("j")
+    def _(event):
+        _set_selection(selected_index + 1, event.app)
+
+    last_click = {"idx": None, "t": 0.0}
+
+    def mouse_handler(mouse_event):
+        nonlocal selected_index
+        # You can add MouseEventType.MOUSE_MOVE event type to allow mouse-move-select.
+        if mouse_event.event_type != MouseEventType.MOUSE_UP:
+            return NotImplemented
+
+        y = mouse_event.position.y
+        current_len = visible_count if animate_in else len(option_list)
+        if current_len == 0:
+            return None
+        if 0 <= y < current_len:
+            _set_selection(y, get_app())
+
+        if mouse_event.event_type == MouseEventType.MOUSE_UP and mouse_event.button == MouseButton.LEFT:
+            now = time.monotonic()
+            idx = selected_index
+            if idx == last_click["idx"] and (now - last_click["t"]) <= 0.5:
+                value = option_list[idx][0]
+                get_app().exit(result=value)
+            last_click["idx"] = idx
+            last_click["t"] = now
+        return None
+
+    def render_lines():
+        fragments = []
+        current_len = visible_count if animate_in else len(option_list)
+        if current_len == 0:
+            current_len = 1
+        current_len = min(current_len, len(option_list))
+        sel = min(display_index, current_len - 1)
+
+        for idx, (_, label) in enumerate(option_list[:current_len]):
+            pointer = ">" if idx == sel else " "
+            prefix = f" {pointer} " if idx == sel else "   "
+            text = f"{prefix}{idx + 1}. {label}"
+            style_class = "class:radio-selected" if idx == sel else "class:radio"
+            fragments.append((style_class, text))
+            if idx != current_len - 1:
+                fragments.append(("", "\n"))
+        return fragments
+
+    class MenuControl(FormattedTextControl):
+        def __init__(self, render_fn, handler):
+            super().__init__(render_fn, focusable=True, show_cursor=False)
+            self._handler = handler
+
+        def mouse_handler(self, mouse_event):
+            return self._handler(mouse_event)
+
+    control = MenuControl(render_lines, mouse_handler)
+    window = Window(content=control, always_hide_cursor=True, dont_extend_width=True, dont_extend_height=True)
+
+    radio_style = Style.from_dict(
+        {
+            "radio-list": "",
+            "radio": "fg:#cbd6e2",
+            "radio-selected": "fg:#e6edf3 bold underline",
+            "radio-checked": "fg:#7ad1a8",
+            "radio-number": "fg:#9dcffb bold",
+        }
+    )
+
+    app_style = merge_styles([style_override, radio_style]) if style_override else radio_style
+
+    kb_final = merge_key_bindings([kb, extra_bindings]) if extra_bindings else kb
+
+    app = Application(
+        layout=Layout(window, focused_element=control),
+        key_bindings=kb_final,
+        mouse_support=True,
+        full_screen=False,
+        style=app_style,
+    )
+
+    if animate_in:
+        async def _animate_in():
+            nonlocal visible_count, selected_index
+            for i in range(1, len(option_list) + 1):
+                visible_count = i
+                if selected_index >= visible_count:
+                    selected_index = visible_count - 1
+                get_app().invalidate()
+                await asyncio.sleep(0.03)
+        app.pre_run_callables.append(lambda: app.create_background_task(_animate_in()))
+
+    result = app.run()
+    if result is None:
+        sel = selected_index or 0
+        result = option_list[sel][0]
+    return result
+
+
 def choose(message: str, options: Iterable[Option], default: str | None = None, extra_bindings: KeyBindings | None = None):
     page_transition(message or "正在切换...")
-    return menu.choose(message=message, options=options, default=default, extra_bindings=extra_bindings, style_override=style)
+    return menu_choice(message=message, options=options, default=default, style_override=style, extra_bindings=extra_bindings)
 
 def set_env_variable(name, value, user=True):
     """
@@ -938,15 +1109,13 @@ def main() -> int:
                 case _:
                     pass
 
-        requested_action = resolve_requested_action()
-
-        # Config/XML-driven path has highest priority: run requested action first, with optional pre-checks.
-        if requested_action:
+        # CLI interface has highest priority: run requested action first, with optional pre-checks.
+        if CLI_ARGS.action:
             if not CLI_ARGS.skip_pre and not flag:
                 pre_ok = pre_main()
                 if not pre_ok:
                     return 1
-            handle_action(requested_action)
+            handle_action(CLI_ARGS.action)
             return 0
 
         pre_ok = True if CLI_ARGS.skip_pre else (pre_main() if not flag else True)

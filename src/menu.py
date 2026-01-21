@@ -23,18 +23,6 @@ from prompt_toolkit.mouse_events import MouseButton, MouseEventType
 from prompt_toolkit.styles import Style, merge_styles
 
 DEFAULT_STYLE: Style | None = None
-DEFAULT_ACTIONS: List[Tuple[str, str]] = [
-    ("root", "一键Root"),
-    ("openshell", "打开CMD (ADB环境)"),
-    ("about", "关于脚本"),
-    ("mods", "扩展管理"),
-    ("commonly", "常用合集"),
-    ("help-links", "链接合集"),
-    ("man-apps", "应用管理"),
-    ("magisk-mod", "Magisk模块管理"),
-    ("user-debug", "开发合集"),
-    ("exit", "退出"),
-]
 
 
 class Option:
@@ -279,7 +267,8 @@ def load_options_from_xml(path: str) -> List[Tuple[str, str]]:
 
 
 def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "请选择操作") -> str:
-    opts = options if options else DEFAULT_ACTIONS
+    if not options:
+        raise ValueError("菜单选项为空，请提供XML或手动传入options")
     if not DEFAULT_STYLE:
         # Fallback style for standalone/batch usage
         fallback_style = Style.from_dict({
@@ -289,7 +278,7 @@ def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "
             "radio-number": "fg:#9dcffb bold",
         })
         set_default_style(fallback_style)
-    return choose(message, opts, default=opts[0][0])
+    return choose(message, options, default=options[0][0])
 
 
 if __name__ == "__main__":
@@ -300,5 +289,8 @@ if __name__ == "__main__":
     xml_path = arg_xml or os.getenv("ATB_MENU_OPTIONS_XML") or os.path.join(os.getcwd(), "menu_options.xml")
 
     loaded = load_options_from_xml(xml_path)
+    if not loaded:
+        print("未找到菜单项，请提供有效的XML配置")
+        sys.exit(1)
     selection = choose_action(loaded)
     print(selection)
