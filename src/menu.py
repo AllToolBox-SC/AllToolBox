@@ -283,8 +283,6 @@ def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "
 
 
 if __name__ == "__main__":
-    # 只接受命令行参数提供XML菜单配置文件
-    import sys
     
     if len(sys.argv) != 2:
         # 改为在屏幕上显示错误信息

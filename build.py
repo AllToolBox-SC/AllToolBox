@@ -570,6 +570,14 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 os.makedirs(nuitka_gcc, exist_ok=True)
                 os.symlink(gcc, nuitka_gcc + r"\bin")
             if profile == 0:
+                bar.set_description("run_cmd.py -> run_cmd.exe")
+                run_step(
+                    [python_exe, "-m", "nuitka",
+                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist"
+                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                    bar
+                )
+
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
@@ -602,6 +610,13 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     bar
                 )
             else:
+                bar.set_description("run_cmd.py -> run_cmd.exe")
+                run_step(
+                    [python_exe, "-m", "nuitka",
+                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                    bar
+                )
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
@@ -635,6 +650,11 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 )
         else:
             if profile == 0:
+                bar.set_description("run_cmd.py -> run_cmd.exe")
+                run_step(
+                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
+                    bar
+                )
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
@@ -659,6 +679,11 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     bar
                 )
             else:
+                bar.set_description("run_cmd.py -> run_cmd.exe")
+                run_step(
+                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
+                    bar
+                )
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
@@ -748,7 +773,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
             print(f" - {m}")
         print("PyInstaller/Nuitka likely failed earlier. Check build output above.")
         return 1
-
+    shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
     shutil.copy2(outputs["repair"], "./build/main/bin/repair.exe")
     shutil.copy2(outputs["check"], "./build/main/bin/check.exe")

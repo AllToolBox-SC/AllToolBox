@@ -937,7 +937,7 @@ def about():
         style=style
     )
 
-@onerror
+
 def checkwin() -> Tuple[str, str, str, str]:
     return (
         platform.system(),
@@ -1227,9 +1227,9 @@ def main() -> int:
     not_allowed_msg = "ATB not allow start (CLI or debug menu). Please ask ATB-Team"
     try:
         if not meta_found:
-            logger.error("BUILD.CONF 丢失")
-            print_formatted_text(HTML(error + "脚本遇到严重问题，已停止运行"), style=style)
-            return 1
+            logger.warning("BUILD.CONF 丢失")
+            # print_formatted_text(HTML(error + "脚本遇到严重问题，已停止运行"), style=style)
+            # return 1
         def handle_action(action: str) -> None:
             match action:
                 case "root":
