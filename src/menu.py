@@ -26,6 +26,16 @@ from prompt_toolkit.styles import Style, merge_styles
 DEFAULT_STYLE: Style | None = None
 
 
+def _clear_menu_lines(count: int) -> None:
+    """Clear the last `count` lines from the terminal (ANSI)."""
+    try:
+        for _ in range(count):
+            sys.stdout.write("\033[F\033[K")  # move cursor up 1 line and clear it
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
 class Option:
     def __init__(self, value, label):
         self.value = value
@@ -215,6 +225,8 @@ def menu_choice(
     if result is None:
         sel = selected_index or 0
         result = option_list[sel][0]
+    # Clear only the menu lines from the terminal, preserving earlier output.
+    _clear_menu_lines(len(option_list))
     return result
 
 
@@ -283,34 +295,27 @@ def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "
 
 
 if __name__ == "__main__":
-    # 只接受命令行参数提供XML菜单配置文件
-    import sys
     
     if len(sys.argv) != 2:
-        # 改为在屏幕上显示错误信息
         print("[错误]请提供XML配置文件的路径作为命令行参数")
         sys.exit(1)
     
     xml_path = sys.argv[1]
     
     if not os.path.isfile(xml_path):
-        # 改为在屏幕上显示错误信息
         print(f"[错误]找不到文件 '{xml_path}'")
         sys.exit(1)
     
     loaded = load_options_from_xml(xml_path)
     if not loaded:
-        # 改为在屏幕上显示错误信息
         print("[错误]XML文件中没有找到有效的菜单项")
         sys.exit(1)
     
     try:
         selection = choose_action(loaded)
     except Exception as e:
-        # 捕获其他可能的错误并在屏幕上显示
         print(f"[错误]菜单选择时发生错误: {str(e)}")
         sys.exit(1)
     
-    # 将选择结果写入文件
     with open("menutmp.txt", "w", encoding="utf-8") as f:
         f.write(selection)
