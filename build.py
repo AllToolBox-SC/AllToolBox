@@ -91,15 +91,15 @@ def get_rust_target_triple():
 def resolve_tool(candidates, extra_dirs=None):
     extra_dirs = extra_dirs or []
     for name in candidates:
-        path = shutil.which(name)
-        if path:
-            return path
-        for d in extra_dirs:
+        for d in extra_dirs:  # prefer explicit/toolchain overrides
             if not d:
                 continue
             candidate = os.path.join(d, name)
             if os.path.isfile(candidate):
                 return candidate
+        path = shutil.which(name)
+        if path:
+            return path
     return None
 
 
@@ -262,6 +262,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     vc_include_parts: list[str] = []
     vc_lib_parts: list[str] = []
     vc_tools_dir = None
+    preferred_msvc_bin: str | None = None
 
     if msvc_bin_override:
         # Derive MSVC tools root and include from a bin path like .../MSVC/<ver>/bin/Hostx64/x64
@@ -335,6 +336,11 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
             if vc_include_parts:
                 break
 
+    if vc_tools_dir and not preferred_msvc_bin:
+        candidate_bin = os.path.join(vc_tools_dir, "bin", "Hostx64", "x64")
+        if os.path.isdir(candidate_bin):
+            preferred_msvc_bin = candidate_bin
+
     # Resolve Windows SDK lib paths (ucrt/um)
     sdk_lib_parts: list[str] = []
     if resolved_winsdk_include:
@@ -388,6 +394,12 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     if lib_parts:
         lib_chain = ";".join(lib_parts)
         os.environ["LIB"] = f"{lib_chain};{os.environ.get('LIB', '')}"
+
+    # Prefer resolved toolchain bins to PATH to avoid mixing versions
+    if winsdk_dir and winsdk_dir not in extra_bins:
+        extra_bins.insert(0, winsdk_dir)
+    if preferred_msvc_bin and preferred_msvc_bin not in extra_bins:
+        extra_bins.insert(0, preferred_msvc_bin)
 
     # Log resolved include/lib paths once for debugging rc/cl/linker lookup
     if include_parts:
@@ -459,9 +471,9 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         "windres",
         "g++",
         "pip",
+        "nuitka run_cmd",
         "nuitka repair",
         "nuitka start",
-        "nuitka check",
         "nuitka menu",
         "cargo",
         "extract",
@@ -573,7 +585,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist"
+                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
                     "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
@@ -583,14 +595,6 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
                     "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
-                    bar
-                )
-
-                bar.set_description("check.py -> check.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/check.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
                     bar
                 )
 
@@ -625,14 +629,6 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     bar
                 )
 
-                bar.set_description("check.py -> check.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/check.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
-                    bar
-                )
-
                 bar.set_description("menu.py -> menu.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
@@ -661,12 +657,6 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                     bar
                 )
 
-                bar.set_description("check.py -> check.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/check.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
-                    bar
-                )
-
                 bar.set_description("menu.py -> menu.exe")
                 run_step(
                     pyinstaller_cmd(python_exe, "src/menu.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
@@ -687,12 +677,6 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
-                    bar
-                )
-
-                bar.set_description("check.py -> check.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/check.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
                     bar
                 )
 
@@ -752,9 +736,9 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         return None
 
     required = {
+        "run_cmd": ["run_cmd"],
         "start": ["main", "start"],
         "repair": ["repair"],
-        "check": ["check"],
         "menu": ["menu"],
     }
 
@@ -776,7 +760,6 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
     shutil.copy2(outputs["repair"], "./build/main/bin/repair.exe")
-    shutil.copy2(outputs["check"], "./build/main/bin/check.exe")
     shutil.copy2(outputs["menu"], "./build/main/bin/menu.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe", "./build/main/bin/FileDialog.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe.config", "./build/main/bin/FileDialog.exe.config")
