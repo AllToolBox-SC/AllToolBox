@@ -124,15 +124,16 @@ def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]
     utc_epoch_default = str(int(time.time()))
 
     ro_build_type = _require_value("ro.build.type", meta_inputs.get("ro.build.type"))
+    derived_key = f"{ro_build_type}-key"
     metadata = {
         "ro.alltoolbox.build.date": _require_value("ro.alltoolbox.build.date", meta_inputs.get("ro.alltoolbox.build.date"), system_date_default),
         "ro.build.type": ro_build_type,
-        "ro.alltoolbox.build.type": _require_value("ro.alltoolbox.build.type", meta_inputs.get("ro.alltoolbox.build.type")),
+        "ro.alltoolbox.build.type": _require_value("ro.alltoolbox.build.type", meta_inputs.get("ro.alltoolbox.build.type"), derived_key),
         "ro.build.version": _require_value("ro.build.version", meta_inputs.get("ro.build.version")),
         "ro.build.date.utc": _require_value("ro.build.date.utc", meta_inputs.get("ro.build.date.utc"), utc_epoch_default),
         "ro.product.current.softversion": _require_value("ro.product.current.softversion", meta_inputs.get("ro.product.current.softversion")),
         "ro.product.commit": _require_value("ro.product.commit", meta_inputs.get("ro.product.commit")),
-        "ro.alltoolbox.build.tags": _require_value("ro.alltoolbox.build.tags", meta_inputs.get("ro.alltoolbox.build.tags")),
+        "ro.alltoolbox.build.tags": _require_value("ro.alltoolbox.build.tags", meta_inputs.get("ro.alltoolbox.build.tags"), derived_key),
         "ro.product.locale": _require_value("ro.product.locale", meta_inputs.get("ro.product.locale")),
         "ro.build.user": _require_value("ro.build.user", meta_inputs.get("ro.build.user")),
     }

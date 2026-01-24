@@ -4,7 +4,6 @@ Menu utilities extracted from start.py for reuse by Python and batch callers.
 Provides interactive menu rendering plus config-driven action resolution via XML.
 """
 from __future__ import annotations
-print("正在加载...")
 import asyncio
 import time
 import os

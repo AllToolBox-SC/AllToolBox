@@ -33,7 +33,6 @@ import requests
 import filehash
 import json
 import traceback
-import winreg
 from pathlib import Path
 
 try:
@@ -459,42 +458,12 @@ def choose(message: str, options: Iterable[Option], default: str | None = None, 
         header_click_callback=header_click_callback,
     )
 
-def set_env_variable(name, value, user=True):
-    """
-    设置环境变量（用户或系统）
-    user=True 设置到当前用户
-    user=False 设置到系统（需要管理员权限）
-    """
-    root = winreg.HKEY_CURRENT_USER if user else winreg.HKEY_LOCAL_MACHINE
-    path = r'Environment'
-    try:
-        registry_key = winreg.OpenKey(root, path, 0, winreg.KEY_SET_VALUE)
-    except FileNotFoundError:
-        registry_key = winreg.CreateKey(root, path)
-
-    winreg.SetValueEx(registry_key, name, 0, winreg.REG_SZ, value)
-    winreg.CloseKey(registry_key)
-
-
-@onerror
-def get_env_variable(name, user=True) -> Optional[str]:
-    """Read environment variable directly from registry to avoid stale process env."""
-    root = winreg.HKEY_CURRENT_USER if user else winreg.HKEY_LOCAL_MACHINE
-    path = r'Environment'
-    try:
-        registry_key = winreg.OpenKey(root, path, 0, winreg.KEY_READ)
-        value, _ = winreg.QueryValueEx(registry_key, name)
-        winreg.CloseKey(registry_key)
-        return value
-    except FileNotFoundError:
-        return None
-
 @onerror
 def menu() -> str:
     global style
     global ENV_HEADER_CLICK_COUNT, BUILD_CONF_PATH, CURRENT_BUILD_META
     if os.path.exists("mod") and os.path.isdir("mod"):
-        print_formatted_text(HTML(info + "已加载扩展列表："), style=style) if len(os.listdir("mod")) != 0 else print_formatted_text(HTML(info + "已加载扩展列表：未加载任何扩展"), style=style)
+        print_formatted_text(HTML("已加载扩展列表："), style=style) if len(os.listdir("mod")) != 0 else print_formatted_text(HTML("已加载扩展列表：未加载任何扩展"), style=style)
         if len(os.listdir("mod")) != 0:
             i: int = 1
             for item in os.listdir("mod"):
@@ -521,7 +490,7 @@ def menu() -> str:
     #         "selected-option": "underline bold",
     #     }
     # )
-    print_formatted_text(ANSI(colorama.Fore.RESET + colorama.Fore.BLUE + "鼠标双击或按回车键确定，方向键，数字键，鼠标单击来选择功能"))
+    print_formatted_text(ANSI("鼠标双击或按回车键确定，方向键，数字键，鼠标单击来选择功能"))
     def header_click():
         global ENV_HEADER_CLICK_COUNT
         ENV_HEADER_CLICK_COUNT += 1
@@ -535,6 +504,10 @@ def menu() -> str:
                 print_formatted_text(HTML(info + f"已切换环境为: {target_env}"), style=style)
             except Exception as exc:
                 print_formatted_text(HTML(error + f"切换环境失败: {exc}"), style=style)
+
+    # Compose header with embedded softversion if available.
+    version_str = CURRENT_BUILD_META.get("ro.product.current.softversion") or ""
+    header = f"XTC AllToolBox {version_str} 控制台&主菜单 by xgj_236" if version_str else "XTC AllToolBox 控制台&主菜单 by xgj_236"
 
     result = choose(
         message="",
@@ -552,7 +525,7 @@ def menu() -> str:
         ],
         default="onekeyroot",
         extra_bindings=kb,
-        header_text="XTC AllToolBox 控制台&主菜单",
+        header_text=header,
         header_click_callback=header_click,
     )
 
@@ -1000,74 +973,17 @@ def pre_main() -> bool:
     else:
         this_path = os.path.dirname(os.path.abspath(__file__))
 
-    def clean_env_value(val: Optional[str]) -> Optional[str]:
-        if not val:
-            return val
-        return val.strip().strip('"').strip().rstrip(';')
+    env_path_lower = (os.environ.get("PATH") or "").lower()
+    keywords = ["windows", "system32", "powershell"]
+    if not all(k in env_path_lower for k in keywords):
+        print_formatted_text(HTML(error + "你的系统环境变量异常，这可能导致异常问题，输入no跳过"), style=style)
+        answer = input().strip().lower()
+        if answer != "no":
+            return False
 
-    atb_path_env = clean_env_value(os.getenv("ATB_PATH"))
-    atb_path_reg = clean_env_value(get_env_variable("ATB_PATH"))
-    atb_path = atb_path_env or atb_path_reg
-    path_v = get_env_variable("PATH", True) or ""
-    path_updated = False
-
-    def norm_path(p: str) -> str:
-        return os.path.normcase(os.path.normpath(p.rstrip("\\/")))
-
-    if not atb_path:
-        with open("whoyou.txt", "w", encoding="utf-8") as f:
-            f.write("1")
-
-    # Clean and drop empty entries from PATH for stable comparisons
-    path_parts = [clean_env_value(p.strip()) for p in path_v.split(";") if p.strip()]
-    path_parts = [p for p in path_parts if p]
-    this_norm = norm_path(this_path)
-    atb_norm = norm_path(atb_path) if atb_path else None
-
-    # Normalize PATH: drop old ATB entry, remove dupes, ensure current path is present
-    cleaned_parts = []
-    seen = set()
-    for p in path_parts:
-        norm = norm_path(p)
-        if atb_norm and norm == atb_norm and this_norm != atb_norm:
-            continue
-        if norm in seen:
-            continue
-        seen.add(norm)
-        cleaned_parts.append(os.path.normpath(p))
-
-    # Ensure current path is present exactly once
-    if this_norm not in seen:
-        cleaned_parts.insert(0, os.path.normpath(this_path))
-        seen.add(this_norm)
-
-    new_path = ";".join(cleaned_parts)
-    normed_current = [norm_path(p) for p in path_parts]
-    normed_new = [norm_path(p) for p in cleaned_parts]
-
-    # Only update PATH when normalized lists differ
-    if normed_new != normed_current:
-        set_env_variable("PATH", new_path)
-        path_updated = True
-
-    atb_same = bool(atb_path) and (atb_norm == this_norm)
-    if not atb_same:
-        set_env_variable("ATB_PATH", this_path)
-        os.environ["ATB_PATH"] = this_path  # keep current process in sync
-        path_updated = True  # trigger refresh once
-        print_formatted_text(HTML(info + "设置环境变量[PATH]..."), style=style)#Test do not remove
-        set_env_variable("ATB_SYS_Channel", "1")
-        with open("whoyou.txt", "w", encoding="utf-8") as f:
-            f.write("2")
-
-    if path_updated:
-        run("call refreshenv 1>nul 2>nul")
-    print_formatted_text(HTML(info + "检查系统变量[PATH]..."), style=style)
-    # PATH 已在上方规范化并写入环境变量，避免重复追加
-    
-    print_formatted_text(HTML(info + "检查系统变量[PATHEXT]..."), style=style)
-    run("set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;")
-    set_title("XTC AllToolBox by xgj_236")
+    softver = CURRENT_BUILD_META.get("ro.product.current.softversion") or ""
+    title = f"XTC AllToolBox {softver} by xgj_236" if softver else "XTC AllToolBox by xgj_236"
+    set_title(title)
     os.makedirs("mod", exist_ok=True)
     for item in os.listdir("mod"):
         item_path = os.path.join("mod", item)
