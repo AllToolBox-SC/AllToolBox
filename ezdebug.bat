@@ -26,9 +26,13 @@ if not exist source (
 if not exist .\source\bin (
     mkdir .\source\bin
 )
+if not exist .\source\bin\conf (
+    mkdir .\source\bin\conf
+)
 copy /y .\src\start.py .\source\bin\main.py 
 copy /y .\src\run_cmd.py .\source\bin\run_cmd.py
 copy /y .\src\repair.py .\source\bin\repair.py
+copy /y .\src\build.conf .\source\bin\conf\build.conf
 if "%1"=="/mode:full" (
     g++.exe -Wall -static -g ./src/launch.cpp ./build/icon.o -municode -o ./source/launch.exe -finput-charset=UTF-8 -fexec-charset=GBK -lstdc++ -lpthread -Og
     cargo build --target-dir ./build/rust

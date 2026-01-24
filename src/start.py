@@ -187,7 +187,7 @@ def warn_unknown_publisher(meta: dict[str, str]) -> None:
     allowed = {"AHA", "XGJ236", "Starry2233"}
     user_val = meta.get("ro.build.user")
     if not user_val or user_val not in allowed:
-        print_formatted_text(HTML(warn + "你使用的未知发布者编译的AllToolBox，可能会有异常问题"), style=style)
+        print_formatted_text(HTML(warn + "你使用的未知发布者编译的AllToolBox，可能会有异常问题, 请谨慎使用。"), style=style)
 
 
 def write_build_metadata(conf_path: Path, meta: dict[str, str]) -> None:
@@ -1114,13 +1114,16 @@ def pre_main() -> bool:
                 webv = filev
 
             if webv > filev:
-                new_version = ""
-                try:
-                    vt = requests.get(version_tmp_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8)
-                    vt.raise_for_status()
-                    new_version = vt.text.strip()
-                except Exception:
-                    new_version = ""
+                # Prefer build metadata (ro.product.current.softversion) over version.txt
+                # to determine the human-readable version; fall back to remote versiontmp.txt.
+                new_version = meta_update.get("ro.product.current.softversion", "") if meta_update else ""
+                if not new_version:
+                    try:
+                        vt = requests.get(version_tmp_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8)
+                        vt.raise_for_status()
+                        new_version = vt.text.strip()
+                    except Exception:
+                        new_version = ""
                 print_formatted_text(HTML(warn+"当前补丁版本过时，必须更新"), style=style)
                 if new_version:
                     print_formatted_text(HTML(info+f"最新补丁版本：{new_version}"), style=style)
@@ -1223,7 +1226,9 @@ def main() -> int:
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
-    debug_allowed = debug_features_allowed(build_meta)
+
+    # If build.conf is missing, fall back to legacy behavior (no gating based on build metadata).
+    debug_allowed = debug_features_allowed(build_meta) if meta_found else True
     not_allowed_msg = "ATB not allow start (CLI or debug menu). Please ask ATB-Team"
     try:
         if not meta_found:
@@ -1250,7 +1255,10 @@ def main() -> int:
         if CLI_ARGS.action:
             if not debug_allowed:
                 print_formatted_text(HTML(error + not_allowed_msg), style=style)
-                return 1
+                print_formatted_text(HTML("按任意键继续..."), style=style)
+                pause()
+                sys.exit()
+            
             if not CLI_ARGS.skip_pre and not flag:
                 pre_ok = pre_main()
                 if not pre_ok:
@@ -1260,6 +1268,8 @@ def main() -> int:
 
         if CLI_ARGS.skip_pre and not debug_allowed:
             print_formatted_text(HTML(warn + not_allowed_msg), style=style)
+            print_formatted_text(HTML("按任意键继续..."), style=style)
+            pause()
 
         pre_ok = True if (CLI_ARGS.skip_pre and debug_allowed) else (pre_main() if not flag else True)
         if not pre_ok:
@@ -1274,7 +1284,7 @@ def main() -> int:
                 if debug_allowed:
                     debug()
                 else:
-                    print_formatted_text(HTML(warn + not_allowed_msg), style=style)
+                    return main() # loop
             case "onekeyroot":
                 clear(); run("call root.bat"); clear()
             case "openshell":
