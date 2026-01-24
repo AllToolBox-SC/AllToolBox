@@ -125,14 +125,14 @@ def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]
 
     ro_build_type = _require_value("ro.build.type", meta_inputs.get("ro.build.type"))
     metadata = {
-        "ro.system.build.date": _require_value("ro.system.build.date", meta_inputs.get("ro.system.build.date"), system_date_default),
+        "ro.alltoolbox.build.date": _require_value("ro.alltoolbox.build.date", meta_inputs.get("ro.alltoolbox.build.date"), system_date_default),
         "ro.build.type": ro_build_type,
-        "ro.system.build.type": _require_value("ro.system.build.type", meta_inputs.get("ro.system.build.type")),
+        "ro.alltoolbox.build.type": _require_value("ro.alltoolbox.build.type", meta_inputs.get("ro.alltoolbox.build.type")),
         "ro.build.version": _require_value("ro.build.version", meta_inputs.get("ro.build.version")),
         "ro.build.date.utc": _require_value("ro.build.date.utc", meta_inputs.get("ro.build.date.utc"), utc_epoch_default),
         "ro.product.current.softversion": _require_value("ro.product.current.softversion", meta_inputs.get("ro.product.current.softversion")),
         "ro.product.commit": _require_value("ro.product.commit", meta_inputs.get("ro.product.commit")),
-        "ro.system.build.tags": _require_value("ro.system.build.tags", meta_inputs.get("ro.system.build.tags")),
+        "ro.alltoolbox.build.tags": _require_value("ro.alltoolbox.build.tags", meta_inputs.get("ro.alltoolbox.build.tags")),
         "ro.product.locale": _require_value("ro.product.locale", meta_inputs.get("ro.product.locale")),
         "ro.build.user": _require_value("ro.build.user", meta_inputs.get("ro.build.user")),
     }
@@ -803,15 +803,14 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     os.makedirs(conf_dir, exist_ok=True)
     conf_path = os.path.join(conf_dir, "build.conf")
     conf_lines = [
-        f"ro.system.build.date={metadata['ro.system.build.date']}",
+        f"ro.alltoolbox.build.date={metadata['ro.alltoolbox.build.date']}",
         f"ro.build.type={metadata['ro.build.type']}",
-        f"ro.system.build.type={metadata['ro.system.build.type']}",
+        f"ro.alltoolbox.build.type={metadata['ro.alltoolbox.build.type']}",
         f"ro.build.version={metadata['ro.build.version']}",
         f"ro.build.date.utc={metadata['ro.build.date.utc']}",
-        f"ro.build.type={metadata['ro.build.type']}",
         f"ro.product.current.softversion={metadata['ro.product.current.softversion']}",
         f"ro.product.commit={metadata['ro.product.commit']}",
-        f"ro.system.build.tags={metadata['ro.system.build.tags']}",
+        f"ro.alltoolbox.build.tags={metadata['ro.alltoolbox.build.tags']}",
         f"ro.product.locale={metadata['ro.product.locale']}",
         f"ro.build.user={metadata['ro.build.user']}",
     ]
@@ -828,7 +827,7 @@ if __name__ == "__main__":
         description="Build ATB.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Metadata defaults: ro.system.build.date uses current CST time (e.g. Wed Dec 03 22:24:49 CST 2025); "
+            "Metadata defaults: ro.alltoolbox.build.date uses current CST time (e.g. Wed Dec 03 22:24:49 CST 2025); "
             "ro.build.date.utc uses current UTC epoch seconds. Override via --ro-* flags or interactively when omitted."
         ),
     )
@@ -896,14 +895,14 @@ if __name__ == "__main__":
         help="Override MSVC include directory (used to resolve std headers like stdarg.h)"
     )
     parser.add_argument("--ro-build-type", type=str, default=None, help="Value for ro.build.type")
-    parser.add_argument("--ro-system-build-type", type=str, default=None, help="Value for ro.system.build.type")
+    parser.add_argument("--ro-alltoolbox-build-type", type=str, default=None, help="Value for ro.alltoolbox.build.type")
     parser.add_argument("--ro-build-version", type=str, default=None, help="Value for ro.build.version")
     parser.add_argument("--ro-product-current-softversion", type=str, default=None, help="Value for ro.product.current.softversion")
     parser.add_argument("--ro-product-commit", type=str, default=None, help="Value for ro.product.commit")
-    parser.add_argument("--ro-system-build-tags", type=str, default=None, help="Value for ro.system.build.tags")
+    parser.add_argument("--ro-alltoolbox-build-tags", type=str, default=None, help="Value for ro.alltoolbox.build.tags")
     parser.add_argument("--ro-product-locale", type=str, default=None, help="Value for ro.product.locale")
     parser.add_argument("--ro-build-user", type=str, default=None, help="Value for ro.build.user")
-    parser.add_argument("--ro-system-build-date", type=str, default=None, help="Override ro.system.build.date (default: current CST time, e.g. Wed Dec 03 22:24:49 CST 2025)")
+    parser.add_argument("--ro-alltoolbox-build-date", type=str, default=None, help="Override ro.alltoolbox.build.date (default: current CST time, e.g. Wed Dec 03 22:24:49 CST 2025)")
     parser.add_argument("--ro-build-date-utc", type=str, default=None, help="Override ro.build.date.utc (default: current UTC epoch seconds)")
     colorama.init(autoreset=True)
     args = parser.parse_args()
@@ -922,14 +921,14 @@ if __name__ == "__main__":
     bmode = args.nuitka if args.nuitka else "pyinstaller"
 
     meta_inputs = {
-        "ro.system.build.date": args.ro_system_build_date,
+        "ro.alltoolbox.build.date": args.ro_alltoolbox_build_date,
         "ro.build.type": args.ro_build_type,
-        "ro.system.build.type": args.ro_system_build_type,
+        "ro.alltoolbox.build.type": args.ro_alltoolbox_build_type,
         "ro.build.version": args.ro_build_version,
         "ro.build.date.utc": args.ro_build_date_utc,
         "ro.product.current.softversion": args.ro_product_current_softversion,
         "ro.product.commit": args.ro_product_commit,
-        "ro.system.build.tags": args.ro_system_build_tags,
+        "ro.alltoolbox.build.tags": args.ro_alltoolbox_build_tags,
         "ro.product.locale": args.ro_product_locale,
         "ro.build.user": args.ro_build_user,
     }

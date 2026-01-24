@@ -169,7 +169,20 @@ def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
             conf_path = cand
             break
     if not conf_path:
-        return meta, False, None
+        # Auto-create a minimal build.conf with safe defaults when missing.
+        conf_path = candidates[0]
+        try:
+            conf_path.parent.mkdir(parents=True, exist_ok=True)
+            meta = {
+                "ro.build.type": "release",
+                "ro.product.locale": "zh-CN",
+                "ro.alltoolbox.build.tags": "release-key",
+                "ro.alltoolbox.build.type": "release-key",
+            }
+            write_build_metadata(conf_path, meta)
+            return meta, True, conf_path
+        except Exception:
+            return meta, False, None
     try:
         with conf_path.open("r", encoding="utf-8") as f:
             for line in f:
@@ -201,19 +214,19 @@ def toggle_environment(conf_path: Path, meta: dict[str, str]) -> str:
     """Toggle between release and userdebug environment by updating build.conf."""
     is_userdebug = (
         meta.get("ro.build.type") == "userdebug" and
-        meta.get("ro.system.build.type") == "userdebug-key" and
-        meta.get("ro.system.build.tags") == "userdebug-key"
+        meta.get("ro.alltoolbox.build.type") == "userdebug-key" and
+        meta.get("ro.alltoolbox.build.tags") == "userdebug-key"
     )
 
     if is_userdebug:
         meta["ro.build.type"] = "release"
-        meta["ro.system.build.type"] = "release-key"
-        meta["ro.system.build.tags"] = "release-key"
+        meta["ro.alltoolbox.build.type"] = "release-key"
+        meta["ro.alltoolbox.build.tags"] = "release-key"
         target = "release"
     else:
         meta["ro.build.type"] = "userdebug"
-        meta["ro.system.build.type"] = "userdebug-key"
-        meta["ro.system.build.tags"] = "userdebug-key"
+        meta["ro.alltoolbox.build.type"] = "userdebug-key"
+        meta["ro.alltoolbox.build.tags"] = "userdebug-key"
         target = "userdebug"
 
     write_build_metadata(conf_path, meta)
@@ -224,14 +237,14 @@ def debug_features_allowed(meta: dict[str, str]) -> bool:
     return (
         (
             meta.get("ro.build.type") == "debug" and
-            meta.get("ro.system.build.type") == "debug-key" and
-            meta.get("ro.system.build.tags") == "debug-key"
+            meta.get("ro.alltoolbox.build.type") == "debug-key" and
+            meta.get("ro.alltoolbox.build.tags") == "debug-key"
         )
         or
         (
             meta.get("ro.build.type") == "userdebug" and
-            meta.get("ro.system.build.type") == "userdebug-key" and
-            meta.get("ro.system.build.tags") == "userdebug-key"
+            meta.get("ro.alltoolbox.build.type") == "userdebug-key" and
+            meta.get("ro.alltoolbox.build.tags") == "userdebug-key"
         )
     )
 
@@ -1087,7 +1100,7 @@ def pre_main() -> bool:
             if meta_found_update:
                 BUILD_CONF_PATH = conf_path_update
                 CURRENT_BUILD_META = meta_update
-            is_userdebug = meta_update.get("ro.build.type") == "userdebug" or meta_update.get("ro.system.build.type") == "userdebug-key"
+            is_userdebug = meta_update.get("ro.build.type") == "userdebug" or meta_update.get("ro.alltoolbox.build.type") == "userdebug-key"
             base = "https://raw.githubusercontent.com/xgj236/AllToolBox/main"
             utc_url = f"{base}/utctmp.txt"
             version_tmp_url = f"{base}/versiontmp.txt"
