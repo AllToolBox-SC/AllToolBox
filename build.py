@@ -196,7 +196,7 @@ def run_step(cmd, bar, **kwargs):
 
 
 @onerror
-def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None, meta_inputs: dict[str, str | None]):
+def main(python_builder: int, profile: int, bmode: str, platform: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None, meta_inputs: dict[str, str | None]):
     print("Build script running...")
     print("Release build") if profile == 0 else print("Debug Build")
     os.environ["PYTHONUTF8"] = "1"
@@ -237,7 +237,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
     resolved_winsdk_include = winsdk_include
     if not resolved_winsdk_include and winsdk_dir:
         # If winsdk_dir looks like .../bin/<ver>/<arch>, map to ../Include/<ver>
-        arch_dir = os.path.basename(winsdk_dir.rstrip("/\\"))
+        os.path.basename(winsdk_dir.rstrip("/\\"))
         ver_dir = os.path.basename(os.path.dirname(winsdk_dir.rstrip("/\\")))
         bin_parent = os.path.dirname(os.path.dirname(winsdk_dir.rstrip("/\\")))
         candidate = os.path.join(bin_parent, "Include", ver_dir)
@@ -341,6 +341,20 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
         candidate_bin = os.path.join(vc_tools_dir, "bin", "Hostx64", "x64")
         if os.path.isdir(candidate_bin):
             preferred_msvc_bin = candidate_bin
+
+    # Platform handling: win32 vs win64
+    is_win32 = str(platform).lower() == "win32"
+    # g++ arch flag (-m32 for 32-bit, -m64 for 64-bit)
+    gxx_arch_flag = "-m32" if is_win32 else "-m64"
+    # machine token for MSVC/cvtres
+    msvc_machine = "X86" if is_win32 else "X64"
+    # Nuitka compiler selection flag
+    nuitka_compiler_flag = None
+    if bmode == "mingw":
+        nuitka_compiler_flag = "--mingw" if is_win32 else "--mingw64"
+    elif bmode == "msvc":
+        # Use explicit msvc arch flags for Nuitka when requested
+        nuitka_compiler_flag = "--msvc-x86" if is_win32 else "--msvc-x64"
 
     # Resolve Windows SDK lib paths (ucrt/um)
     sdk_lib_parts: list[str] = []
@@ -504,13 +518,13 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
                 "-o", "build/main/双击运行.exe".encode("utf-8"),
                 "-finput-charset=UTF-8", "-fexec-charset=GBK",
-                "-lstdc++", "-lpthread", "-O3"],
+                "-lstdc++", "-lpthread", "-O3", gxx_arch_flag],
                 bar
             ) if profile == 0 else run_step(
                 [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
                 "-o", "build/main/双击运行.exe".encode("utf-8"),
                 "-finput-charset=UTF-8", "-fexec-charset=GBK",
-                "-lstdc++", "-lpthread", "-Og"],
+                "-lstdc++", "-lpthread", "-Og", gxx_arch_flag],
                 bar
             )
         elif builder == 1:
@@ -540,7 +554,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 cvtres_path = "cvtres.exe"
             print(f"Using cvtres: {cvtres_path}")
             run_step(
-                [cvtres_path, "/out:build\\icon.obj", "build\\icon.res"],
+                [cvtres_path, f"/MACHINE:{msvc_machine}", "/out:build\\icon.obj", "build\\icon.res"],
                 bar
             )
             bar.set_description("Building launcher")
@@ -556,10 +570,10 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
             for lp in lib_parts:
                 lib_flags.append(f"/LIBPATH:{lp}")
             run_step(
-                [cl_path, "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
+                [cl_path, "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
                 bar
             ) if profile == 0 else run_step(
-                [cl_path, "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
+                [cl_path, "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
                 bar
             )
 
@@ -586,32 +600,32 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 bar.set_description("run_cmd.py -> run_cmd.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                        "src/run_cmd.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
                     bar
                 )
 
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                        "src/repair.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
                     bar
                 )
 
                 bar.set_description("menu.py -> menu.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/menu.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                        "src/menu.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                    "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--nofollow-import-to=debughook"],
+                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                        "src/start.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
                     bar
                 )
             else:
@@ -619,30 +633,30 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
                 run_step(
                     [python_exe, "-m", "nuitka",
                     "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/run_cmd.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                    "src/run_cmd.py", nuitka_compiler_flag, "--include-module=debughook"],
                     bar
                 )
                 bar.set_description("repair.py -> repair.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/repair.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                        "src/repair.py", nuitka_compiler_flag, "--include-module=debughook"],
                     bar
                 )
 
                 bar.set_description("menu.py -> menu.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/menu.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                        "src/menu.py", nuitka_compiler_flag, "--include-module=debughook"],
                     bar
                 )
                 
                 bar.set_description("start.py -> main.exe")
                 run_step(
                     [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/start.py", "--mingw" if bmode == "mingw" else "--msvc=latest", "--include-module=debughook"],
+                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                        "src/start.py", nuitka_compiler_flag, "--include-module=debughook"],
                     bar
                 )
         else:
@@ -720,7 +734,7 @@ def main(python_builder: int, profile: int, bmode: str, builder: int, winsdk_dir
 
     src = "./src/bats/"
     dst = "./build/main/bin"
-    for root, dirs, files in os.walk(src):
+    for root, _, files in os.walk(src):
         for file in files:
             src_path = os.path.join(root, file)
             rel = os.path.relpath(src_path, src)
@@ -878,6 +892,12 @@ if __name__ == "__main__":
         help="Windows SDK include directory (e.g. C:/Program Files (x86)/Windows Kits/10/Include/10.0.xxxxx.x)"
     )
     parser.add_argument(
+        "--platform",
+        choices=["win32", "win64"],
+        default="win64",
+        help="Target platform: win32 or win64 (default: win64)"
+    )
+    parser.add_argument(
         "--mingw-bin",
         type=str,
         default=None,
@@ -895,6 +915,7 @@ if __name__ == "__main__":
         default=None,
         help="Override MSVC include directory (used to resolve std headers like stdarg.h)"
     )
+    
     parser.add_argument("--ro-build-type", type=str, default=None, help="Value for ro.build.type")
     parser.add_argument("--ro-alltoolbox-build-type", type=str, default=None, help="Value for ro.alltoolbox.build.type")
     parser.add_argument("--ro-build-version", type=str, default=None, help="Value for ro.build.version")
@@ -920,6 +941,7 @@ if __name__ == "__main__":
         builder = 1
     profile = 0 if args.type == "release" else 1
     bmode = args.nuitka if args.nuitka else "pyinstaller"
+    platform = args.platform
 
     meta_inputs = {
         "ro.alltoolbox.build.date": args.ro_alltoolbox_build_date,
@@ -934,4 +956,4 @@ if __name__ == "__main__":
         "ro.build.user": args.ro_build_user,
     }
 
-    sys.exit(main(pybuilder, profile, bmode, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs))
+    sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs))
