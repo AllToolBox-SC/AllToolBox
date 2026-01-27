@@ -353,8 +353,10 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     if bmode == "mingw":
         nuitka_compiler_flag = "--mingw" if is_win32 else "--mingw64"
     elif bmode == "msvc":
-        # Use explicit msvc arch flags for Nuitka when requested
-        nuitka_compiler_flag = "--msvc-x86" if is_win32 else "--msvc-x64"
+        # Use generic MSVC selection for Nuitka. Recent Nuitka versions
+        # do not accept --msvc-x86/--msvc-x64; use --msvc and let Nuitka
+        # pick the proper toolchain (or rely on environment overrides).
+        nuitka_compiler_flag = "--msvc=latest"
 
     # Resolve Windows SDK lib paths (ucrt/um)
     sdk_lib_parts: list[str] = []
