@@ -79,6 +79,7 @@ ENV_HEADER_CLICK_COUNT = 0
 
 LINE = "-" * 68
 DEBUG = os.getenv("ATB_DEBUG_MODE", "0") == "1"
+allow_xtc = False
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -520,6 +521,44 @@ def run(cmd):
                     '''.replace("\n", "").replace(20*" ", "")])
 
 @onerror
+def root():
+    global allow_xtc
+    global style
+    clear()
+    run("call logo")
+    if allow_xtc:
+        result = choose(
+            message="一键Root菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "小天才一键Root"),
+                ("2", "手机通用Root"),
+            ],
+            default="A"
+        )
+    else:
+        print_formatted_text(HTML(info + "由于版权原因，暂时下线XTCRoot功能，敬请谅解"), style=style)
+        result = choose(
+            message="一键Root菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("2", "手机通用Root"),
+            ],
+            default="A"
+        )
+    match result:
+        case "A":
+            clear(); return
+        case "1":
+            run("call root.bat")
+        case "2":
+            run("call otherroot.bat 3")
+    root()
+    
+
+@onerror
 def appset():
     global style
     clear()
@@ -665,7 +704,7 @@ def magisk():
 
 @onerror
 def debug():
-    global style
+    global style, allow_xtc
     clear()
     run("call logo")
     result = choose(
@@ -679,6 +718,7 @@ def debug():
             ("4", "调整为更新状态"),
             ("5", "debug sel"),
             ("6", "切换环境 (release/userdebug)"),
+            ("7", "允许使用xtc一键root功能"),
         ],
         default="A"
     )
@@ -706,6 +746,10 @@ def debug():
                 print_formatted_text(HTML(info + f"已切换环境为: {target_env}"), style=style)
             except Exception as exc:
                 print_formatted_text(HTML(error + f"切换环境失败: {exc}"), style=style)
+            time.sleep(1)
+        case "7":
+            allow_xtc = True
+            print_formatted_text(HTML(info + "已允许使用xtc一键root功能"), style=style)
             time.sleep(1)
     debug()
 
@@ -925,6 +969,7 @@ def pause():
 
 @onerror
 def pre_main() -> bool:
+    global allow_xtc
     global flag
     global logger
     global DEBUG
@@ -980,14 +1025,7 @@ def pre_main() -> bool:
     except Exception:
         logger.exception("Failed to change working directory to bin; continuing")
 
-    try:
-        wmic_path = shutil.which("wmic.exe")
-        if wmic_path:
-            logger.debug("WMIC detected at %s", wmic_path)
-        else:
-            logger.info("WMIC 未检测到（已被弃用），跳过相关功能；若需要请手动安装系统组件。")
-    except Exception:
-        logger.exception("Exception while checking for WMIC; ignoring")
+    
 
     def _run_if_present(base_name: str):
         try:
@@ -1056,6 +1094,10 @@ def pre_main() -> bool:
         except Exception:
             pass
         run("call upall.bat run")
+    try:
+        allow_xtc = requests.get("https://atb.xgj.qzz.io/other/xtcpolicy.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8).json()["allowXTC"]
+    except Exception:
+        allow_xtc = False
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
         os_name, os_release, os_version, arch = checkwin()
@@ -1167,7 +1209,7 @@ def main() -> int:
                 else:
                     return main() # loop
             case "onekeyroot":
-                clear(); run("call root.bat"); clear()
+                root()
             case "openshell":
                 clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
             case "about": about()
