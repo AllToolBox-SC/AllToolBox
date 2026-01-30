@@ -79,6 +79,7 @@ ENV_HEADER_CLICK_COUNT = 0
 
 LINE = "-" * 68
 DEBUG = os.getenv("ATB_DEBUG_MODE", "0") == "1"
+allow_xtc = False
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -507,23 +508,76 @@ def run(cmd):
                     '''.replace("\n", "").replace(20*" ", "")])
 
 @onerror
-def appset():
+def root():
+    global allow_xtc
     global style
     clear()
     run("call logo")
-    result = choose(
-        message="应用管理菜单",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "安装应用"),
-            ("2", "卸载应用"),
-            ("3", "安装xtc状态栏"),
-            ("4", "设置微信QQ为开机自启应用"),
-            ("5", "解除z10安装限制"),
-        ],
-        default="A"
-    )
+    if allow_xtc:
+        result = choose(
+            message="一键Root菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "小天才一键Root"),
+                ("2", "手机通用Root"),
+            ],
+            default="A"
+        )
+    else:
+        print_formatted_text(HTML(info + "由于版权原因，暂时下线XTCRoot功能，敬请谅解"), style=style)
+        result = choose(
+            message="一键Root菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("2", "手机通用Root"),
+            ],
+            default="A"
+        )
+    match result:
+        case "A":
+            clear(); return
+        case "1":
+            run("call root.bat")
+        case "2":
+            run("call otherroot.bat 3")
+    root()
+    
+
+@onerror
+def appset():
+    global style, allow_xtc
+    clear()
+    run("call logo")
+    if allow_xtc:
+        result = choose(
+            message="应用管理菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "安装应用"),
+                ("2", "卸载应用"),
+                ("3", "安装xtc状态栏"),
+                ("4", "设置微信QQ为开机自启应用"),
+                ("5", "解除z10安装限制"),
+            ],
+            default="A"
+        )
+    else:
+        print_formatted_text(HTML(info + "由于版权原因，暂时下线部分功能，敬请谅解"), style=style)
+        result = choose(
+            message="应用管理菜单",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "安装应用"),
+                ("2", "卸载应用"),
+                ("3", "安装状态栏悬浮窗"),
+                ("4", "设置微信QQ为开机自启应用"),
+            ],
+            default="A"
+        )
     if result == "A":
         clear(); return
     if result == "1":
@@ -540,24 +594,44 @@ def appset():
 
 @onerror
 def userdebug():
+    global style
+    global allow_xtc
     clear()
     run("call logo")
-    result = choose(
-        message="开发合集",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "手表信息"),
-            ("2", "打开充电可用"),
-            ("3", "型号与innermodel对照表"),
-            ("4", "导入本地root文件"),
-            ("5", "一键root[不刷userdata]"),
-            ("6", "恢复出厂设置[不是超级恢复]"),
-            ("7", "开机自刷Recovery"),
-            ("8", "强制加好友[已失效]"),
-        ],
-        default="A"
-    )
+    if allow_xtc:
+        result = choose(
+            message="开发合集",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "手表信息"),
+                ("2", "打开充电可用"),
+                ("3", "型号与innermodel对照表"),
+                ("4", "导入本地root文件"),
+                ("5", "一键root[不刷userdata]"),
+                ("6", "恢复出厂设置[不是超级恢复]"),
+                ("7", "开机自刷Recovery"),
+                ("8", "强制加好友[已失效]"),
+            ],
+            default="A"
+        )
+    else:
+        print_formatted_text(HTML(info + "由于版权原因，暂时下线部分功能，敬请谅解"), style=style)
+        result = choose(
+            message="开发合集",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "手表信息"),
+                ("2", "打开充电可用"),
+                ("3", "型号与innermodel对照表"),
+                ("4", "导入本地root文件"),
+                ("6", "恢复出厂设置[不是超级恢复]"),
+                ("7", "开机自刷Recovery"),
+            ],
+            default="A"
+        )
+
     if result == "A":
         clear(); return
     if result == "1":
@@ -582,26 +656,43 @@ def userdebug():
 
 @onerror
 def commonly():
-    global style
+    global style, allow_xtc
     clear()
     run("call logo")
-    result = choose(
-        message="常用合集",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "ADB/自检校验码计算"),
-            ("2", "离线OTA升级"),
-            ("3", "刷入TWRP"),
-            ("4", "刷入XTC Patch"),
-            ("5", "备份与恢复"),
-            ("6", "安卓8.1root后优化"),
-            ("7", "进入qmmi[9008]"),
-            ("8", "scrcpy投屏"),
-            ("9", "高级重启"),
-        ],
-        default="A"
-    )
+    if allow_xtc:
+        result = choose(
+            message="常用合集",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "ADB/自检校验码计算"),
+                ("2", "离线OTA升级"),
+                ("3", "刷入TWRP"),
+                ("4", "刷入XTC Patch"),
+                ("5", "备份与恢复"),
+                ("6", "安卓8.1root后优化"),
+                ("7", "进入qmmi[9008]"),
+                ("8", "scrcpy投屏"),
+                ("9", "高级重启"),
+            ],
+            default="A"
+        )
+    else:
+        print_formatted_text(HTML(info + "由于版权原因，暂时下线ADB/自检校验码计算功能，敬请谅解"), style=style)
+        result = choose(
+            message="常用合集",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("2", "离线OTA升级"),
+                ("3", "刷入TWRP"),
+                ("5", "备份与恢复"),
+                ("7", "进入qmmi[9008]"),
+                ("8", "scrcpy投屏"),
+                ("9", "高级重启"),
+            ],
+            default="A"
+        )
     match result:
         case "A":
             clear(); return
@@ -652,7 +743,7 @@ def magisk():
 
 @onerror
 def debug():
-    global style
+    global style, allow_xtc
     clear()
     run("call logo")
     result = choose(
@@ -666,6 +757,7 @@ def debug():
             ("4", "调整为更新状态"),
             ("5", "debug sel"),
             ("6", "切换环境 (release/userdebug)"),
+            ("7", "允许使用xtc一键root功能"),
         ],
         default="A"
     )
@@ -694,6 +786,10 @@ def debug():
             except Exception as exc:
                 print_formatted_text(HTML(error + f"切换环境失败: {exc}"), style=style)
             time.sleep(1)
+        case "7":
+            allow_xtc = True
+            print_formatted_text(HTML(info + "已允许使用xtc一键root功能"), style=style)
+            time.sleep(1)
     debug()
 
 @onerror
@@ -720,23 +816,39 @@ def color():
 
 @onerror
 def help_menu():
+    global style, allow_xtc
     clear()
     run("call logo")
-    result = choose(
-        message="帮助与链接",
-        #text="请选择",
-        options=[
-            ("A", "返回上级菜单"),
-            ("1", "超级恢复文件下载"),
-            ("2", "离线OTA下载"),
-            ("3", "面具模块下载"),
-            ("4", "APK下载"),
-            ("5", "工具箱官网"),
-            ("6", "开发文档"),
-            ("7", "123云盘解除下载限制")
-        ],
-        default="A"
-    )
+    if allow_xtc:
+        result = choose(
+            message="帮助与链接",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("1", "超级恢复文件下载"),
+                ("2", "离线OTA下载"),
+                ("3", "面具模块下载"),
+                ("4", "APK下载"),
+                ("5", "工具箱官网"),
+                ("6", "开发文档"),
+                ("7", "123云盘解除下载限制")
+            ],
+            default="A"
+        )
+    else:
+        result = choose(
+            message="帮助与链接",
+            #text="请选择",
+            options=[
+                ("A", "返回上级菜单"),
+                ("2", "离线OTA下载"),
+                ("3", "面具模块下载"),
+                ("5", "工具箱官网"),
+                ("6", "开发文档"),
+                ("7", "123云盘解除下载限制")
+            ],
+            default="A"
+        )
     match result:
         case "A":
             clear()
@@ -912,6 +1024,7 @@ def pause():
 
 @onerror
 def pre_main() -> bool:
+    global allow_xtc
     global flag
     global logger
     global DEBUG
@@ -967,14 +1080,7 @@ def pre_main() -> bool:
     except Exception:
         logger.exception("Failed to change working directory to bin; continuing")
 
-    try:
-        wmic_path = shutil.which("wmic.exe")
-        if wmic_path:
-            logger.debug("WMIC detected at %s", wmic_path)
-        else:
-            logger.info("WMIC 未检测到（已被弃用），跳过相关功能；若需要请手动安装系统组件。")
-    except Exception:
-        logger.exception("Exception while checking for WMIC; ignoring")
+    
 
     def _run_if_present(base_name: str):
         try:
@@ -1043,6 +1149,11 @@ def pre_main() -> bool:
         except Exception:
             pass
         run("call upall.bat run")
+    try:
+        allow_xtc = requests.get("https://atb.xgj.qzz.io/other/xtcpolicy.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8).json()["allowXTC"]
+    except Exception:
+        logger.error(traceback.format_exc())
+        allow_xtc = False
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
         os_name, os_release, os_version, arch = checkwin()
@@ -1118,7 +1229,7 @@ def main() -> int:
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
-    debug_allowed = debug_features_allowed(build_meta) if meta_found else True
+    debug_allowed =  True
     not_allowed_msg = "ATB not allow start debug menu. Please ask ATB-Team"
     try:
         if not meta_found:
@@ -1154,7 +1265,7 @@ def main() -> int:
                 else:
                     return main() # loop
             case "onekeyroot":
-                clear(); run("call root.bat"); clear()
+                root()
             case "openshell":
                 clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
             case "about": about()
