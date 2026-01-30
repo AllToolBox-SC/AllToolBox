@@ -108,7 +108,6 @@ def page_transition(text: str = "", duration: float = 0.35) -> None:
     sys.stdout.write("\r" + " " * width + "\r")
     sys.stdout.flush()
 
-# session = subprocess.Popen(["cmd.exe"], shell=True)
 
 class Option:
     def __init__(self, value, label):
@@ -131,22 +130,6 @@ def onerror(fn):
             time.sleep(3)
             cleanup(-1)
     return wrapper
-
-
-def parse_cli_args():
-    """Lightweight CLI to trigger a specific menu action without interaction."""
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument(
-        "--action",
-        choices=[
-            "root", "openshell", "about", "mods", "commonly",
-            "help-links", "man-apps", "magisk-mod", "user-debug"
-        ],
-        help="直接执行指定菜单项后退出 (例如 --action root)",
-    )
-    parser.add_argument("--skip-pre", action="store_true", help="跳过启动自检(仅调试用)")
-    args, _ = parser.parse_known_args()
-    return args
 
 
 def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
@@ -195,11 +178,7 @@ def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
     return meta, True, conf_path
 
 
-def warn_unknown_publisher(meta: dict[str, str]) -> None:
-    allowed = {"AHA", "XGJ236", "Starry2233"}
-    user_val = meta.get("ro.build.user")
-    if not user_val or user_val not in allowed:
-        print_formatted_text(HTML(warn + "你使用的未知发布者编译的AllToolBox，可能会有异常问题, 请谨慎使用。"), style=style)
+# Unknown publisher check removed - no-op in UI-driven build.
 
 
 def write_build_metadata(conf_path: Path, meta: dict[str, str]) -> None:
@@ -248,7 +227,6 @@ def debug_features_allowed(meta: dict[str, str]) -> bool:
     )
 
 
-CLI_ARGS = parse_cli_args()
 
 
 def menu_choice(
@@ -991,22 +969,37 @@ def pre_main() -> bool:
             if os.path.exists(os.path.join(item_path, "start.bat")):
                 run(f'cd /d mod\\{item} && call start.bat')
 
-    os.chdir("..\\bin")
-    # tip: 已停止对WMIC的支持
-    # wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
-    # if wmic.returncode != 0:
-    #     r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
-    #     if r.lower() == "y":
-    #         print_formatted_text(HTML(info + "坐和放宽，把时间交给我们..."), style=style)
-    #         print_formatted_text(HTML(info + "若提示是否重启，建议选择重启"), style=style)
-    #         run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
-    #         run("call refreshenv")
-    #     else:
-    #         print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
-        
-    run("call withone")
-    run("call afterup")
+    try:
+        candidate_bin = os.path.normpath(os.path.join(this_path, "..", "bin"))
+        if os.path.isdir(candidate_bin):
+            os.chdir(candidate_bin)
+            logger.debug("Changed working directory to %s", candidate_bin)
+        else:
+            logger.debug("Bin directory not found: %s; continuing in current working directory", candidate_bin)
+    except Exception:
+        logger.exception("Failed to change working directory to bin; continuing")
+
+    try:
+        wmic_path = shutil.which("wmic.exe")
+        if wmic_path:
+            logger.debug("WMIC detected at %s", wmic_path)
+        else:
+            logger.info("WMIC 未检测到（已被弃用），跳过相关功能；若需要请手动安装系统组件。")
+    except Exception:
+        logger.exception("Exception while checking for WMIC; ignoring")
+
+    def _run_if_present(base_name: str):
+        try:
+            if os.path.exists(base_name) or os.path.exists(base_name + ".bat"):
+                run(f"call {base_name}")
+            else:
+                logger.debug("%s not found; skipping", base_name)
+        except Exception:
+            logger.exception("Error running %s", base_name)
+
+    _run_if_present("withone")
+    _run_if_present("afterup")
     if os.path.exists("..\\bugjump.7z"): os.remove("..\\bugjump.7z")
     if os.path.exists("..\\repair.exe"): os.remove("..\\repair.exe")
     if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
@@ -1043,8 +1036,6 @@ def pre_main() -> bool:
                 webv = filev
 
             if webv > filev:
-                # Prefer build metadata (ro.product.current.softversion) over version.txt
-                # to determine the human-readable version; fall back to remote versiontmp.txt.
                 new_version = meta_update.get("ro.product.current.softversion", "") if meta_update else ""
                 if not new_version:
                     try:
@@ -1063,12 +1054,10 @@ def pre_main() -> bool:
                 subprocess.run(["cmd", "/c", "start", "repair.exe"])
                 cleanup(2)
         except Exception:
-            # Skip update on failure but continue startup
             pass
         run("call upall.bat run")
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
-        # run("call checkwin")
         os_name, os_release, os_version, arch = checkwin()
         match arch[0]:
             case "64bit": arch = "x64"
@@ -1084,8 +1073,6 @@ def pre_main() -> bool:
             print_formatted_text(HTML(error + "此脚本需要 Windows 8 或更高版本"), style=style)
             pause(); return 1
         print_formatted_text(HTML(info + f"当前系统: {os_name} {os_release}"), style=style)
-
-        # print_formatted_text(HTML(info + "Windows属性成功检测"), style=style)
         adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
         adb_process.wait()
         if adb_process.returncode != 0:
@@ -1130,17 +1117,6 @@ def cleanup(code: int = 0):
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
     if check_adb_server():
         subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
-        # TODO: 优化kill-server
-        # try:
-        #     adbd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #     adbd.settimeout(4)
-        #     adbd.connect(("127.0.0.1", 5037))
-        #     cmd = "kill"
-        #     length_hex = f"{len(cmd):04X}"
-        #     adbd.sendall((length_hex + cmd).encode("ascii"))
-        #     adbd.close()
-        # except socket.timeout, Exception:
-        #     pass
 
 
     sys.exit(code)
@@ -1155,15 +1131,11 @@ def main() -> int:
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
-
-    # If build.conf is missing, fall back to legacy behavior (no gating based on build metadata).
     debug_allowed = debug_features_allowed(build_meta) if meta_found else True
-    not_allowed_msg = "ATB not allow start (CLI or debug menu). Please ask ATB-Team"
+    not_allowed_msg = "ATB not allow start debug menu. Please ask ATB-Team"
     try:
         if not meta_found:
             logger.warning("BUILD.CONF 丢失")
-            # print_formatted_text(HTML(error + "脚本遇到严重问题，已停止运行"), style=style)
-            # return 1
         def handle_action(action: str) -> None:
             match action:
                 case "root":
@@ -1180,32 +1152,12 @@ def main() -> int:
                 case _:
                     pass
 
-        # CLI interface has highest priority: run requested action first, with optional pre-checks.
-        if CLI_ARGS.action:
-            if not debug_allowed:
-                print_formatted_text(HTML(error + not_allowed_msg), style=style)
-                print_formatted_text(HTML("按任意键继续..."), style=style)
-                pause()
-                sys.exit()
-            
-            if not CLI_ARGS.skip_pre and not flag:
-                pre_ok = pre_main()
-                if not pre_ok:
-                    return 1
-            handle_action(CLI_ARGS.action)
-            return 0
-
-        if CLI_ARGS.skip_pre and not debug_allowed:
-            print_formatted_text(HTML(warn + not_allowed_msg), style=style)
-            print_formatted_text(HTML("按任意键继续..."), style=style)
-            pause()
-
-        pre_ok = True if (CLI_ARGS.skip_pre and debug_allowed) else (pre_main() if not flag else True)
+        # Start interactive (UI/menu) flow. Run pre-main checks once.
+        pre_ok = pre_main() if not flag else True
         if not pre_ok:
             return 1
         clear()
         run("call logo")
-        warn_unknown_publisher(build_meta)
 
         result = menu()
         match result:
