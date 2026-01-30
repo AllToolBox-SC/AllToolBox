@@ -128,14 +128,10 @@ def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]
     metadata = {
         "ro.alltoolbox.build.date": _require_value("ro.alltoolbox.build.date", meta_inputs.get("ro.alltoolbox.build.date"), system_date_default),
         "ro.build.type": ro_build_type,
-        "ro.alltoolbox.build.type": _require_value("ro.alltoolbox.build.type", meta_inputs.get("ro.alltoolbox.build.type"), derived_key),
         "ro.build.version": _require_value("ro.build.version", meta_inputs.get("ro.build.version")),
         "ro.build.date.utc": _require_value("ro.build.date.utc", meta_inputs.get("ro.build.date.utc"), utc_epoch_default),
         "ro.product.current.softversion": _require_value("ro.product.current.softversion", meta_inputs.get("ro.product.current.softversion")),
         "ro.product.commit": _require_value("ro.product.commit", meta_inputs.get("ro.product.commit")),
-        "ro.alltoolbox.build.tags": _require_value("ro.alltoolbox.build.tags", meta_inputs.get("ro.alltoolbox.build.tags"), derived_key),
-        "ro.product.locale": _require_value("ro.product.locale", meta_inputs.get("ro.product.locale")),
-        "ro.build.user": _require_value("ro.build.user", meta_inputs.get("ro.build.user")),
     }
     return metadata
 
@@ -822,14 +818,10 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     conf_lines = [
         f"ro.alltoolbox.build.date={metadata['ro.alltoolbox.build.date']}",
         f"ro.build.type={metadata['ro.build.type']}",
-        f"ro.alltoolbox.build.type={metadata['ro.alltoolbox.build.type']}",
         f"ro.build.version={metadata['ro.build.version']}",
         f"ro.build.date.utc={metadata['ro.build.date.utc']}",
         f"ro.product.current.softversion={metadata['ro.product.current.softversion']}",
         f"ro.product.commit={metadata['ro.product.commit']}",
-        f"ro.alltoolbox.build.tags={metadata['ro.alltoolbox.build.tags']}",
-        f"ro.product.locale={metadata['ro.product.locale']}",
-        f"ro.build.user={metadata['ro.build.user']}",
     ]
     with open(conf_path, "w", encoding="utf-8") as f:
         f.write("\n".join(conf_lines))
@@ -919,13 +911,9 @@ if __name__ == "__main__":
     )
     
     parser.add_argument("--ro-build-type", type=str, default=None, help="Value for ro.build.type")
-    parser.add_argument("--ro-alltoolbox-build-type", type=str, default=None, help="Value for ro.alltoolbox.build.type")
     parser.add_argument("--ro-build-version", type=str, default=None, help="Value for ro.build.version")
     parser.add_argument("--ro-product-current-softversion", type=str, default=None, help="Value for ro.product.current.softversion")
     parser.add_argument("--ro-product-commit", type=str, default=None, help="Value for ro.product.commit")
-    parser.add_argument("--ro-alltoolbox-build-tags", type=str, default=None, help="Value for ro.alltoolbox.build.tags")
-    parser.add_argument("--ro-product-locale", type=str, default=None, help="Value for ro.product.locale")
-    parser.add_argument("--ro-build-user", type=str, default=None, help="Value for ro.build.user")
     parser.add_argument("--ro-alltoolbox-build-date", type=str, default=None, help="Override ro.alltoolbox.build.date (default: current CST time, e.g. Wed Dec 03 22:24:49 CST 2025)")
     parser.add_argument("--ro-build-date-utc", type=str, default=None, help="Override ro.build.date.utc (default: current UTC epoch seconds)")
     colorama.init(autoreset=True)
@@ -948,14 +936,10 @@ if __name__ == "__main__":
     meta_inputs = {
         "ro.alltoolbox.build.date": args.ro_alltoolbox_build_date,
         "ro.build.type": args.ro_build_type,
-        "ro.alltoolbox.build.type": args.ro_alltoolbox_build_type,
         "ro.build.version": args.ro_build_version,
         "ro.build.date.utc": args.ro_build_date_utc,
         "ro.product.current.softversion": args.ro_product_current_softversion,
         "ro.product.commit": args.ro_product_commit,
-        "ro.alltoolbox.build.tags": args.ro_alltoolbox_build_tags,
-        "ro.product.locale": args.ro_product_locale,
-        "ro.build.user": args.ro_build_user,
     }
 
     sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs))
