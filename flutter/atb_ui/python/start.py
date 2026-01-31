@@ -79,7 +79,6 @@ ENV_HEADER_CLICK_COUNT = 0
 
 LINE = "-" * 68
 DEBUG = os.getenv("ATB_DEBUG_MODE", "0") == "1"
-allow_xtc = False
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -109,6 +108,7 @@ def page_transition(text: str = "", duration: float = 0.35) -> None:
     sys.stdout.write("\r" + " " * width + "\r")
     sys.stdout.flush()
 
+# session = subprocess.Popen(["cmd.exe"], shell=True)
 
 class Option:
     def __init__(self, value, label):
@@ -131,6 +131,22 @@ def onerror(fn):
             time.sleep(3)
             cleanup(-1)
     return wrapper
+
+
+def parse_cli_args():
+    """Lightweight CLI to trigger a specific menu action without interaction."""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--action",
+        choices=[
+            "root", "openshell", "about", "mods", "commonly",
+            "help-links", "man-apps", "magisk-mod", "user-debug"
+        ],
+        help="直接执行指定菜单项后退出 (例如 --action root)",
+    )
+    parser.add_argument("--skip-pre", action="store_true", help="跳过启动自检(仅调试用)")
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
@@ -158,6 +174,9 @@ def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
             conf_path.parent.mkdir(parents=True, exist_ok=True)
             meta = {
                 "ro.build.type": "release",
+                "ro.product.locale": "zh-CN",
+                "ro.alltoolbox.build.tags": "release-key",
+                "ro.alltoolbox.build.type": "release-key",
             }
             write_build_metadata(conf_path, meta)
             return meta, True, conf_path
@@ -176,7 +195,11 @@ def load_build_metadata() -> tuple[dict[str, str], bool, Path | None]:
     return meta, True, conf_path
 
 
-# Unknown publisher check removed - no-op in UI-driven build.
+def warn_unknown_publisher(meta: dict[str, str]) -> None:
+    allowed = {"AHA", "XGJ236", "Starry2233"}
+    user_val = meta.get("ro.build.user")
+    if not user_val or user_val not in allowed:
+        print_formatted_text(HTML(warn + "你使用的未知发布者编译的AllToolBox，可能会有异常问题, 请谨慎使用。"), style=style)
 
 
 def write_build_metadata(conf_path: Path, meta: dict[str, str]) -> None:
@@ -189,14 +212,20 @@ def write_build_metadata(conf_path: Path, meta: dict[str, str]) -> None:
 def toggle_environment(conf_path: Path, meta: dict[str, str]) -> str:
     """Toggle between release and userdebug environment by updating build.conf."""
     is_userdebug = (
-        meta.get("ro.build.type") == "userdebug" 
+        meta.get("ro.build.type") == "userdebug" and
+        meta.get("ro.alltoolbox.build.type") == "userdebug-key" and
+        meta.get("ro.alltoolbox.build.tags") == "userdebug-key"
     )
 
     if is_userdebug:
         meta["ro.build.type"] = "release"
+        meta["ro.alltoolbox.build.type"] = "release-key"
+        meta["ro.alltoolbox.build.tags"] = "release-key"
         target = "release"
     else:
         meta["ro.build.type"] = "userdebug"
+        meta["ro.alltoolbox.build.type"] = "userdebug-key"
+        meta["ro.alltoolbox.build.tags"] = "userdebug-key"
         target = "userdebug"
 
     write_build_metadata(conf_path, meta)
@@ -206,19 +235,20 @@ def toggle_environment(conf_path: Path, meta: dict[str, str]) -> str:
 def debug_features_allowed(meta: dict[str, str]) -> bool:
     return (
         (
-            meta.get("ro.build.type") == "debug"
+            meta.get("ro.build.type") == "debug" and
+            meta.get("ro.alltoolbox.build.type") == "debug-key" and
+            meta.get("ro.alltoolbox.build.tags") == "debug-key"
         )
         or
         (
-            meta.get("ro.build.type") == "userdebug" 
-        )
-        or
-        (
-            meta.get("ro.build.type") == "Debug"
+            meta.get("ro.build.type") == "userdebug" and
+            meta.get("ro.alltoolbox.build.type") == "userdebug-key" and
+            meta.get("ro.alltoolbox.build.tags") == "userdebug-key"
         )
     )
 
 
+CLI_ARGS = parse_cli_args()
 
 
 def menu_choice(
@@ -502,86 +532,33 @@ def menu() -> str:
     clear(); return result
 
 def run(cmd):
-    subprocess.run(["cmd.exe", "/v:on", "/c", f'''
-                    @echo off &
-                    setlocal enabledelayedexpansion 1>nul 2>nul &
-                    call .\\color.bat &
-                    set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; &
-                    @{cmd} &
-                    endlocal 1>nul 2>nul &
+    subprocess.run(["cmd.exe", "/v:on", "/c", f'''\
+                    @echo off &\
+                    setlocal enabledelayedexpansion 1>nul 2>nul &\
+                    call .\\color.bat &\
+                    set PATHEXT=%PATHEXT%;.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC; &\
+                    @{cmd} &\
+                    endlocal 1>nul 2>nul &\
                     '''.replace("\n", "").replace(20*" ", "")])
 
 @onerror
-def root():
-    global allow_xtc
+def appset():
     global style
     clear()
     run("call logo")
-    if allow_xtc:
-        result = choose(
-            message="一键Root菜单",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "小天才一键Root"),
-                ("2", "手机通用Root"),
-            ],
-            default="A"
-        )
-    else:
-        print_formatted_text(HTML(info + "由于版权原因，暂时下线XTCRoot功能，敬请谅解"), style=style)
-        result = choose(
-            message="一键Root菜单",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("2", "手机通用Root"),
-            ],
-            default="A"
-        )
-    match result:
-        case "A":
-            clear(); return
-        case "1":
-            run("call root.bat")
-        case "2":
-            run("call otherroot.bat 3")
-    root()
-    
-
-@onerror
-def appset():
-    global style, allow_xtc
-    clear()
-    run("call logo")
-    if allow_xtc:
-        result = choose(
-            message="应用管理菜单",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "安装应用"),
-                ("2", "卸载应用"),
-                ("3", "安装xtc状态栏"),
-                ("4", "设置微信QQ为开机自启应用"),
-                ("5", "解除z10安装限制"),
-            ],
-            default="A"
-        )
-    else:
-        print_formatted_text(HTML(info + "由于版权原因，暂时下线部分功能，敬请谅解"), style=style)
-        result = choose(
-            message="应用管理菜单",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "安装应用"),
-                ("2", "卸载应用"),
-                ("3", "安装状态栏悬浮窗"),
-                ("4", "设置微信QQ为开机自启应用"),
-            ],
-            default="A"
-        )
+    result = choose(
+        message="应用管理菜单",
+        #text="请选择",
+        options=[
+            ("A", "返回上级菜单"),
+            ("1", "安装应用"),
+            ("2", "卸载应用"),
+            ("3", "安装xtc状态栏"),
+            ("4", "设置微信QQ为开机自启应用"),
+            ("5", "解除z10安装限制"),
+        ],
+        default="A"
+    )
     if result == "A":
         clear(); return
     if result == "1":
@@ -598,44 +575,24 @@ def appset():
 
 @onerror
 def userdebug():
-    global style
-    global allow_xtc
     clear()
     run("call logo")
-    if allow_xtc:
-        result = choose(
-            message="开发合集",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "手表信息"),
-                ("2", "打开充电可用"),
-                ("3", "型号与innermodel对照表"),
-                ("4", "导入本地root文件"),
-                ("5", "一键root[不刷userdata]"),
-                ("6", "恢复出厂设置[不是超级恢复]"),
-                ("7", "开机自刷Recovery"),
-                ("8", "强制加好友[已失效]"),
-            ],
-            default="A"
-        )
-    else:
-        print_formatted_text(HTML(info + "由于版权原因，暂时下线部分功能，敬请谅解"), style=style)
-        result = choose(
-            message="开发合集",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "手表信息"),
-                ("2", "打开充电可用"),
-                ("3", "型号与innermodel对照表"),
-                ("4", "导入本地root文件"),
-                ("6", "恢复出厂设置[不是超级恢复]"),
-                ("7", "开机自刷Recovery"),
-            ],
-            default="A"
-        )
-
+    result = choose(
+        message="开发合集",
+        #text="请选择",
+        options=[
+            ("A", "返回上级菜单"),
+            ("1", "手表信息"),
+            ("2", "打开充电可用"),
+            ("3", "型号与innermodel对照表"),
+            ("4", "导入本地root文件"),
+            ("5", "一键root[不刷userdata]"),
+            ("6", "恢复出厂设置[不是超级恢复]"),
+            ("7", "开机自刷Recovery"),
+            ("8", "强制加好友[已失效]"),
+        ],
+        default="A"
+    )
     if result == "A":
         clear(); return
     if result == "1":
@@ -660,43 +617,26 @@ def userdebug():
 
 @onerror
 def commonly():
-    global style, allow_xtc
+    global style
     clear()
     run("call logo")
-    if allow_xtc:
-        result = choose(
-            message="常用合集",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "ADB/自检校验码计算"),
-                ("2", "离线OTA升级"),
-                ("3", "刷入TWRP"),
-                ("4", "刷入XTC Patch"),
-                ("5", "备份与恢复"),
-                ("6", "安卓8.1root后优化"),
-                ("7", "进入qmmi[9008]"),
-                ("8", "scrcpy投屏"),
-                ("9", "高级重启"),
-            ],
-            default="A"
-        )
-    else:
-        print_formatted_text(HTML(info + "由于版权原因，暂时下线ADB/自检校验码计算功能，敬请谅解"), style=style)
-        result = choose(
-            message="常用合集",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("2", "离线OTA升级"),
-                ("3", "刷入TWRP"),
-                ("5", "备份与恢复"),
-                ("7", "进入qmmi[9008]"),
-                ("8", "scrcpy投屏"),
-                ("9", "高级重启"),
-            ],
-            default="A"
-        )
+    result = choose(
+        message="常用合集",
+        #text="请选择",
+        options=[
+            ("A", "返回上级菜单"),
+            ("1", "ADB/自检校验码计算"),
+            ("2", "离线OTA升级"),
+            ("3", "刷入TWRP"),
+            ("4", "刷入XTC Patch"),
+            ("5", "备份与恢复"),
+            ("6", "安卓8.1root后优化"),
+            ("7", "进入qmmi[9008]"),
+            ("8", "scrcpy投屏"),
+            ("9", "高级重启"),
+        ],
+        default="A"
+    )
     match result:
         case "A":
             clear(); return
@@ -747,7 +687,7 @@ def magisk():
 
 @onerror
 def debug():
-    global style, allow_xtc
+    global style
     clear()
     run("call logo")
     result = choose(
@@ -761,7 +701,6 @@ def debug():
             ("4", "调整为更新状态"),
             ("5", "debug sel"),
             ("6", "切换环境 (release/userdebug)"),
-            ("7", "允许使用xtc一键root功能"),
         ],
         default="A"
     )
@@ -790,10 +729,6 @@ def debug():
             except Exception as exc:
                 print_formatted_text(HTML(error + f"切换环境失败: {exc}"), style=style)
             time.sleep(1)
-        case "7":
-            allow_xtc = True
-            print_formatted_text(HTML(info + "已允许使用xtc一键root功能"), style=style)
-            time.sleep(1)
     debug()
 
 @onerror
@@ -820,39 +755,23 @@ def color():
 
 @onerror
 def help_menu():
-    global style, allow_xtc
     clear()
     run("call logo")
-    if allow_xtc:
-        result = choose(
-            message="帮助与链接",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("1", "超级恢复文件下载"),
-                ("2", "离线OTA下载"),
-                ("3", "面具模块下载"),
-                ("4", "APK下载"),
-                ("5", "工具箱官网"),
-                ("6", "开发文档"),
-                ("7", "123云盘解除下载限制")
-            ],
-            default="A"
-        )
-    else:
-        result = choose(
-            message="帮助与链接",
-            #text="请选择",
-            options=[
-                ("A", "返回上级菜单"),
-                ("2", "离线OTA下载"),
-                ("3", "面具模块下载"),
-                ("5", "工具箱官网"),
-                ("6", "开发文档"),
-                ("7", "123云盘解除下载限制")
-            ],
-            default="A"
-        )
+    result = choose(
+        message="帮助与链接",
+        #text="请选择",
+        options=[
+            ("A", "返回上级菜单"),
+            ("1", "超级恢复文件下载"),
+            ("2", "离线OTA下载"),
+            ("3", "面具模块下载"),
+            ("4", "APK下载"),
+            ("5", "工具箱官网"),
+            ("6", "开发文档"),
+            ("7", "123云盘解除下载限制")
+        ],
+        default="A"
+    )
     match result:
         case "A":
             clear()
@@ -980,7 +899,7 @@ def about():
         style=style
     )
     print_formatted_text(
-        HTML(info + "作者哔哩哔哩账号：https://b23.tv/L54R5ZV"),
+        HTML(info + "作者哔哩哔哩账号：https://b23.tv/L54R5V"),
         style=style
     )
     print_formatted_text(
@@ -1026,9 +945,26 @@ def pause():
     PromptSession(key_bindings=kb).prompt("")
 
 
+def print_status(kind: str, text: str) -> None:
+    """Unified status output with existing color prefixes."""
+    prefix_map = {
+        "info": info,
+        "warn": warn,
+        "error": error,
+    }
+    prefix = prefix_map.get(kind, "")
+    print_formatted_text(HTML(prefix + text), style=style)
+
+
+def prompt_skip(message: str, skip_word: str = "no") -> bool:
+    """Show a warning message and ask for confirmation to continue."""
+    print_status("error", message)
+    answer = input().strip().lower()
+    return answer == skip_word.lower()
+
+
 @onerror
 def pre_main() -> bool:
-    global allow_xtc
     global flag
     global logger
     global DEBUG
@@ -1058,9 +994,7 @@ def pre_main() -> bool:
     env_path_lower = (os.environ.get("PATH") or "").lower()
     keywords = ["windows", "system32", "powershell"]
     if not all(k in env_path_lower for k in keywords):
-        print_formatted_text(HTML(error + "你的系统环境变量异常，这可能导致异常问题，输入no跳过"), style=style)
-        answer = input().strip().lower()
-        if answer != "no":
+        if not prompt_skip("你的系统环境变量异常，这可能导致异常问题，输入no跳过", skip_word="no"):
             return False
 
     softver = CURRENT_BUILD_META.get("ro.product.current.softversion") or ""
@@ -1073,30 +1007,22 @@ def pre_main() -> bool:
             if os.path.exists(os.path.join(item_path, "start.bat")):
                 run(f'cd /d mod\\{item} && call start.bat')
 
+    os.chdir("..\\bin")
+    # tip: 已停止对WMIC的支持
+    # wmic = subprocess.run(["cmd.exe", "/c", "where", "wmic.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
-    try:
-        candidate_bin = os.path.normpath(os.path.join(this_path, "..", "bin"))
-        if os.path.isdir(candidate_bin):
-            os.chdir(candidate_bin)
-            logger.debug("Changed working directory to %s", candidate_bin)
-        else:
-            logger.debug("Bin directory not found: %s; continuing in current working directory", candidate_bin)
-    except Exception:
-        logger.exception("Failed to change working directory to bin; continuing")
-
-    
-
-    def _run_if_present(base_name: str):
-        try:
-            if os.path.exists(base_name) or os.path.exists(base_name + ".bat"):
-                run(f"call {base_name}")
-            else:
-                logger.debug("%s not found; skipping", base_name)
-        except Exception:
-            logger.exception("Error running %s", base_name)
-
-    _run_if_present("withone")
-    _run_if_present("afterup")
+    # if wmic.returncode != 0:
+    #     r = input("WMIC工具未找到，是否安装WMIC？(Y/N)：")
+    #     if r.lower() == "y":
+    #         print_formatted_text(HTML(info + "坐和放宽，把时间交给我们..."), style=style)
+    #         print_formatted_text(HTML(info + "若提示是否重启，建议选择重启"), style=style)
+    #         run("DISM /Online /Add-Capability /CapabilityName:WMIC~~~~")
+    #         run("call refreshenv")
+    #     else:
+    #         print_formatted_text(HTML(warn + "WMIC未安装，可能导致未知问题"), style=style)
+        
+    run("call withone")
+    run("call afterup")
     if os.path.exists("..\\bugjump.7z"): os.remove("..\\bugjump.7z")
     if os.path.exists("..\\repair.exe"): os.remove("..\\repair.exe")
     if os.getenv("ATB_SKIP_UPDATE", "0") != "1":
@@ -1106,7 +1032,7 @@ def pre_main() -> bool:
             if meta_found_update:
                 BUILD_CONF_PATH = conf_path_update
                 CURRENT_BUILD_META = meta_update
-            is_userdebug = meta_update.get("ro.build.type") == "userdebug"
+            is_userdebug = meta_update.get("ro.build.type") == "userdebug" or meta_update.get("ro.alltoolbox.build.type") == "userdebug-key"
             base = "https://raw.githubusercontent.com/xgj236/AllToolBox/main"
             utc_url = f"{base}/utctmp.txt"
             version_tmp_url = f"{base}/versiontmp.txt"
@@ -1133,6 +1059,8 @@ def pre_main() -> bool:
                 webv = filev
 
             if webv > filev:
+                # Prefer build metadata (ro.product.current.softversion) over version.txt
+                # to determine the human-readable version; fall back to remote versiontmp.txt.
                 new_version = meta_update.get("ro.product.current.softversion", "") if meta_update else ""
                 if not new_version:
                     try:
@@ -1151,26 +1079,12 @@ def pre_main() -> bool:
                 subprocess.run(["cmd", "/c", "start", "repair.exe"])
                 cleanup(2)
         except Exception:
+            # Skip update on failure but continue startup
             pass
         run("call upall.bat run")
-        try:
-            if CURRENT_BUILD_META.get("persist.xtc_allow_lock_True") == "True":
-                allow_xtc = True
-            elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("True", "1", "yes", "y"):
-                allow_xtc = True
-            elif debug_features_allowed(CURRENT_BUILD_META):
-                allow_xtc = True
-            else:
-                try:
-                    allow_xtc = requests.get("https://atb.xgj.qzz.io/other/xtcpolicy.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8).json().get("allowXTC", False)
-                except Exception:
-                    logger.error(traceback.format_exc())
-                    allow_xtc = False
-        except Exception:
-            logger.error(traceback.format_exc())
-            allow_xtc = False
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
+        # run("call checkwin")
         os_name, os_release, os_version, arch = checkwin()
         match arch[0]:
             case "64bit": arch = "x64"
@@ -1186,6 +1100,8 @@ def pre_main() -> bool:
             print_formatted_text(HTML(error + "此脚本需要 Windows 8 或更高版本"), style=style)
             pause(); return 1
         print_formatted_text(HTML(info + f"当前系统: {os_name} {os_release}"), style=style)
+
+        # print_formatted_text(HTML(info + "Windows属性成功检测"), style=style)
         adb_process = subprocess.Popen(["adb.exe", "version"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, shell=True)
         adb_process.wait()
         if adb_process.returncode != 0:
@@ -1203,7 +1119,7 @@ def pre_main() -> bool:
         {info}关于作者：本脚本由快乐小公爵236等作者制作
         {info}作者QQ：3247039462
         {info}工具箱交流与反馈QQ群：907491503
-        {info}作者哔哩哔哩账号：https://b23.tv/L54R5ZV
+        {info}作者哔哩哔哩账号：https://b23.tv/L54R5V
         {info}bug与建议反馈邮箱：ATBbug@xgj.qzz.io""".replace(" " * 8, "")), style=style)
     print_formatted_text(HTML(info + "按任意键进入主界面"), style=style)
 
@@ -1230,9 +1146,18 @@ def cleanup(code: int = 0):
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
     if check_adb_server():
         subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        # TODO: 优化kill-server
+        # try:
+        #     adbd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #     adbd.settimeout(4)
+        #     adbd.connect(("127.0.0.1", 5037))
+        #     cmd = "kill"
+        #     length_hex = f"{len(cmd):04X}"
+        #     adbd.sendall((length_hex + cmd).encode("ascii"))
+        #     adbd.close()
+        # except socket.timeout, Exception:
+        #     pass
 
-
-    sys.exit(code)
 
 @onerror
 def main() -> int:
@@ -1244,11 +1169,15 @@ def main() -> int:
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
-    debug_allowed =  debug_features_allowed(build_meta) if meta_found else True
-    not_allowed_msg = "ATB not allow start debug menu. Please ask ATB-Team"
+
+    # If build.conf is missing, fall back to legacy behavior (no gating based on build metadata).
+    debug_allowed = debug_features_allowed(build_meta) if meta_found else True
+    not_allowed_msg = "ATB not allow start (CLI or debug menu). Please ask ATB-Team"
     try:
         if not meta_found:
             logger.warning("BUILD.CONF 丢失")
+            # print_formatted_text(HTML(error + "脚本遇到严重问题，已停止运行"), style=style)
+            # return 1
         def handle_action(action: str) -> None:
             match action:
                 case "root":
@@ -1265,12 +1194,32 @@ def main() -> int:
                 case _:
                     pass
 
-        # Start interactive (UI/menu) flow. Run pre-main checks once.
-        pre_ok = pre_main() if not flag else True
+        # CLI interface has highest priority: run requested action first, with optional pre-checks.
+        if CLI_ARGS.action:
+            if not debug_allowed:
+                print_status("error", not_allowed_msg)
+                print_status("info", "按任意键继续...")
+                pause()
+                sys.exit()
+            
+            if not CLI_ARGS.skip_pre and not flag:
+                pre_ok = pre_main()
+                if not pre_ok:
+                    return 1
+            handle_action(CLI_ARGS.action)
+            return 0
+
+        if CLI_ARGS.skip_pre and not debug_allowed:
+            print_status("warn", not_allowed_msg)
+            print_status("info", "按任意键继续...")
+            pause()
+
+        pre_ok = True if (CLI_ARGS.skip_pre and debug_allowed) else (pre_main() if not flag else True)
         if not pre_ok:
             return 1
         clear()
         run("call logo")
+        warn_unknown_publisher(build_meta)
 
         result = menu()
         match result:
@@ -1280,7 +1229,7 @@ def main() -> int:
                 else:
                     return main() # loop
             case "onekeyroot":
-                root()
+                clear(); run("call root.bat"); clear()
             case "openshell":
                 clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
             case "about": about()
