@@ -132,6 +132,7 @@ def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]
         "ro.build.date.utc": _require_value("ro.build.date.utc", meta_inputs.get("ro.build.date.utc"), utc_epoch_default),
         "ro.product.current.softversion": _require_value("ro.product.current.softversion", meta_inputs.get("ro.product.current.softversion")),
         "ro.product.commit": _require_value("ro.product.commit", meta_inputs.get("ro.product.commit")),
+        "persist.atb.xtc.allow": _require_value("persist.atb.xtc.allow", meta_inputs.get("persist.atb.xtc.allow"), "False"),
     }
     return metadata
 
@@ -822,6 +823,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         f"ro.build.date.utc={metadata['ro.build.date.utc']}",
         f"ro.product.current.softversion={metadata['ro.product.current.softversion']}",
         f"ro.product.commit={metadata['ro.product.commit']}",
+        f"persist.atb.xtc.allow={metadata.get('persist.atb.xtc.allow', 'False')}",
     ]
     with open(conf_path, "w", encoding="utf-8") as f:
         f.write("\n".join(conf_lines))
@@ -916,6 +918,7 @@ if __name__ == "__main__":
     parser.add_argument("--ro-product-commit", type=str, default=None, help="Value for ro.product.commit")
     parser.add_argument("--ro-alltoolbox-build-date", type=str, default=None, help="Override ro.alltoolbox.build.date (default: current CST time, e.g. Wed Dec 03 22:24:49 CST 2025)")
     parser.add_argument("--ro-build-date-utc", type=str, default=None, help="Override ro.build.date.utc (default: current UTC epoch seconds)")
+    parser.add_argument("--persist-atb-xtc-allow", type=str, default=None, help="Set persist.atb.xtc.allow in build.conf (True/False)")
     colorama.init(autoreset=True)
     args = parser.parse_args()
     
@@ -940,6 +943,7 @@ if __name__ == "__main__":
         "ro.build.date.utc": args.ro_build_date_utc,
         "ro.product.current.softversion": args.ro_product_current_softversion,
         "ro.product.commit": args.ro_product_commit,
+        "persist.atb.xtc.allow": args.persist_atb_xtc_allow,
     }
 
     sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs))

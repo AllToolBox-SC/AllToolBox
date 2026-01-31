@@ -212,6 +212,10 @@ def debug_features_allowed(meta: dict[str, str]) -> bool:
         (
             meta.get("ro.build.type") == "userdebug" 
         )
+        or
+        (
+            meta.get("ro.build.type") == "Debug"
+        )
     )
 
 
@@ -1149,11 +1153,22 @@ def pre_main() -> bool:
         except Exception:
             pass
         run("call upall.bat run")
-    try:
-        allow_xtc = requests.get("https://atb.xgj.qzz.io/other/xtcpolicy.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8).json()["allowXTC"]
-    except Exception:
-        logger.error(traceback.format_exc())
-        allow_xtc = False
+        try:
+            if CURRENT_BUILD_META.get("persist.xtc_allow_lock_True") == "True":
+                allow_xtc = True
+            elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("true", "1", "yes", "y"):
+                allow_xtc = True
+            elif debug_features_allowed(CURRENT_BUILD_META):
+                allow_xtc = True
+            else:
+                try:
+                    allow_xtc = requests.get("https://atb.xgj.qzz.io/other/xtcpolicy.json", headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}, timeout=8).json().get("allowXTC", False)
+                except Exception:
+                    logger.error(traceback.format_exc())
+                    allow_xtc = False
+        except Exception:
+            logger.error(traceback.format_exc())
+            allow_xtc = False
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(info + "正在检查Windows属性..."), style=style)
         os_name, os_release, os_version, arch = checkwin()
@@ -1229,7 +1244,7 @@ def main() -> int:
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
-    debug_allowed =  True
+    debug_allowed =  debug_features_allowed(build_meta) if meta_found else True
     not_allowed_msg = "ATB not allow start debug menu. Please ask ATB-Team"
     try:
         if not meta_found:
