@@ -7,6 +7,8 @@ import platform
 import time
 import datetime
 import asyncio
+import math
+import threading
 from typing import Optional, Tuple, Iterable, List
 import ctypes
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -86,7 +88,7 @@ def pause_hint(message: str = "按任意键继续..."):
     except EOFError:
         pass
 
-def download_file(url, filename, show_progress=True):
+def download_file(url, filename, show_progress=True, threads: int = 32):
     import os
     import requests
 
@@ -95,29 +97,86 @@ def download_file(url, filename, show_progress=True):
 
     headers = {"User-Agent": "pan.baidu.com"}
 
-    logger.info("Start download: %s -> %s", url, filename)
+    logger.info("Start download: %s -> %s (threads=%s)", url, filename, threads)
 
+    # First, try HEAD to get size and range support
+    total = 0
+    accept_ranges = False
     try:
-        r = requests.get(url, headers=headers, stream=True, timeout=30, verify=True)
-        r.raise_for_status()
-    except Exception as e:
-        logger.exception("Download failed: %s", url)
-        raise Exception(f"下载失败: {e}")
+        h = requests.head(url, headers=headers, timeout=15, allow_redirects=True)
+        if h.ok:
+            total = int(h.headers.get("content-length", 0) or 0)
+            accept_ranges = h.headers.get("accept-ranges", "").lower() == "bytes"
+    except Exception:
+        pass
 
-    total = int(r.headers.get("content-length", 0))
-    bar = tqdm.tqdm(total=total if total > 0 else None, unit="B", unit_scale=True, desc=os.path.basename(filename), leave=False) if show_progress else None
+    # Fallback single-thread if no size or range not supported
+    if not accept_ranges or total <= 0 or threads <= 1:
+        try:
+            r = requests.get(url, headers=headers, stream=True, timeout=30, verify=True)
+            r.raise_for_status()
+        except Exception as e:
+            logger.exception("Download failed: %s", url)
+            raise Exception(f"下载失败: {e}")
 
+        total = int(r.headers.get("content-length", 0))
+        bar = tqdm.tqdm(total=total if total > 0 else None, unit="B", unit_scale=True, desc=os.path.basename(filename), leave=False) if show_progress else None
+
+        with open(filename, "wb") as f:
+            for data in r.iter_content(chunk_size=1024 * 1024):
+                if not data:
+                    continue
+                f.write(data)
+                if bar:
+                    bar.update(len(data))
+        if bar:
+            bar.close()
+        logger.info("Download finished (single-thread): %s", filename)
+        print(f"下载{filename} 完成 .")
+        return filename
+
+    # Multi-threaded ranged download
+    part_size = math.ceil(total / threads)
+    bar = tqdm.tqdm(total=total, unit="B", unit_scale=True, desc=os.path.basename(filename), leave=False) if show_progress else None
+    lock = threading.Lock()
+
+    # Pre-allocate file
     with open(filename, "wb") as f:
-        for data in r.iter_content(chunk_size=1024 * 1024):
-            if not data:
+        f.truncate(total)
+
+    def download_part(start: int, end: int):
+        rng_header = {"Range": f"bytes={start}-{end}", **headers}
+        try:
+            resp = requests.get(url, headers=rng_header, stream=True, timeout=30, verify=True)
+            resp.raise_for_status()
+            with open(filename, "r+b") as wf:
+                wf.seek(start)
+                for chunk in resp.iter_content(chunk_size=1024 * 512):
+                    if not chunk:
+                        continue
+                    wf.write(chunk)
+                    if bar:
+                        with lock:
+                            bar.update(len(chunk))
+        except Exception as exc:
+            logger.exception("Part download failed: %s-%s", start, end)
+            raise exc
+
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = []
+        for i in range(threads):
+            start = i * part_size
+            end = min(total - 1, start + part_size - 1)
+            if start > end:
                 continue
-            f.write(data)
-            if bar:
-                bar.update(len(data))
+            futures.append(executor.submit(download_part, start, end))
+        # ensure exceptions propagate
+        for fut in as_completed(futures):
+            fut.result()
 
     if bar:
         bar.close()
-    logger.info("Download finished: %s", filename)
+    logger.info("Download finished (multi-thread, %s threads): %s", threads, filename)
     print(f"下载{filename} 完成 .")
     return filename
 
@@ -433,7 +492,7 @@ def menu() -> str:
             ("Other", "其他文件下载（有用）"),
             ("wipe", "wipe.img文件下载"),
             ("exe", "exe文件下载"),
-            ("Unlock", "解除ATB-XTC限制补丁"),
+#            ("Unlock", "解除ATB-XTC限制补丁"),
             ("exit", "退出工具")
         ],
         default="full",
@@ -448,25 +507,17 @@ def logo():
 def full():
     page_transition("完整修补ATB（不包含ND03文件）")
     tasks = [shell, files, dll, conf, other, wipe, exe]
-    print_formatted_text(HTML(f"{info} 开始并行下载/解压，线程数=64"), style=style)
-    logger.info("Running full download with 64 threads")
+    print_formatted_text(HTML(f"{info} 顺序执行下载与解压（一次一个任务，每个任务内部32线程分块下载）"), style=style)
+    logger.info("Running full download sequentially (per-task threads=32)")
     errors: list[str] = []
-    try:
-        with ThreadPoolExecutor(max_workers=64) as executor:
-            future_map = {executor.submit(fn, False): fn.__name__ for fn in tasks}
-            for fut in as_completed(future_map):
-                name = future_map[fut]
-                try:
-                    fut.result()
-                except Exception as exc:
-                    errors.append(f"{name}: {exc}")
-                    logger.exception("Task %s failed", name)
-                    print_formatted_text(HTML(f"{error} {name} 失败: {exc}"), style=style)
-    except Exception as e:
-        errors.append(str(e))
-        logger.exception("Full run failed")
-        print_formatted_text(HTML(f"{error} 执行完整修补时出错: {e}"), style=style)
-
+    for fn in tasks:
+        name = fn.__name__
+        try:
+            fn(need_pause=False)
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            logger.exception("Task %s failed", name)
+            print_formatted_text(HTML(f"{error} {name} 失败: {exc}"), style=style)
     if errors:
         print_formatted_text(HTML(f"{warn} 完整修补完成但存在错误: {'; '.join(errors)}"), style=style)
     else:
@@ -571,14 +622,14 @@ def main() -> int:
                     full()
                 case "shell":
                     shell() 
-                case "files": files()
+                case "files":files()
                 case "Dll": dll()
                 case "ND03": ND03()
                 case "Conf": conf()
                 case "Other": other()
                 case "wipe": wipe()
                 case "exe": exe()
-                case "Unlock": unlock()
+#                case "Unlock": unlock()
                 case _:
                     pass
 
@@ -606,8 +657,8 @@ def main() -> int:
                 wipe()
             case "exe":
                 exe()
-            case "Unlock":
-                unlock()
+#            case "Unlock":
+#                unlock()
             case "exit": return 0
         return main() # loop
     except KeyboardInterrupt:
