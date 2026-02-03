@@ -1,16 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-hookATBXTCNOTALLOW
-
-查找项目中的 build.conf 并将 persist.atb.xtc.allow 强制设置为 True。
-可选参数 --lock 会同时写入 persist.xtc_allow_lock_True=True。
-
-用法示例：
-  python tools/hookATBXTCNOTALLOW.py
-  python tools/hookATBXTCNOTALLOW.py --path ./build/main/bin/conf/build.conf --lock
-"""
-
+#Made by AHA
 from pathlib import Path
 import argparse
 import sys
@@ -88,16 +78,25 @@ def main():
     parser.add_argument("--lock", action="store_true", help="同时写入 persist.xtc_allow_lock_True=True")
     args = parser.parse_args()
 
-    conf_path = find_build_conf(args.path)
-    if not conf_path:
-        print("未找到 build.conf，尝试在当前工作目录或常见位置创建 conf/build.conf 以便写入。")
-        # create minimal conf dir next to cwd/conf/build.conf
-        candidate = Path.cwd() / "conf" / "build.conf"
-        candidate.parent.mkdir(parents=True, exist_ok=True)
+    # If user explicitly sets --path, ensure that path exists (create dirs + file if missing)
+    conf_path: Path | None = None
+    if args.path:
+        candidate = Path(args.path)
+        if not candidate.exists():
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.write_text("ro.build.type=release\n", encoding="utf-8")
+            print(f"指定路径不存在，已创建新的 build.conf: {candidate}")
         conf_path = candidate
-        if not conf_path.exists():
-            conf_path.write_text("ro.build.type=release\n", encoding="utf-8")
-            print(f"已创建新的 build.conf: {conf_path}")
+    else:
+        conf_path = find_build_conf(None)
+        if not conf_path:
+            print("未找到 build.conf，尝试在当前工作目录或常见位置创建 conf/build.conf 以便写入。")
+            candidate = Path.cwd() / "conf" / "build.conf"
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            conf_path = candidate
+            if not conf_path.exists():
+                conf_path.write_text("ro.build.type=release\n", encoding="utf-8")
+                print(f"已创建新的 build.conf: {conf_path}")
 
     print(f"使用 build.conf: {conf_path}")
     lines = read_conf_lines(conf_path)

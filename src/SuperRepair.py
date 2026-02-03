@@ -93,7 +93,7 @@ def download_file(url, filename, show_progress=True):
     if not url or not url.startswith("http"):
         raise Exception(f"URL错误: {url}")
 
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
+    headers = {"User-Agent": "pan.baidu.com"}
 
     logger.info("Start download: %s -> %s", url, filename)
 
@@ -474,7 +474,7 @@ def full():
     pause_hint()
     return
 def shell(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/Shell.7z?sign=cSsVChelV8sl9i43JXUnU2-cTzohXrSYj_HsLLnSGoE=:0"#2
+    url="https://pan.xgj.qzz.io/d/Baidu/root/Shell.7z?sign=MJEkdGp_avjB_pO3hCn-lL6hyDBQyjjFZiODiV8QKt4=:0"#2
     file="shell.7z"
     logger.info("Begin task shell")
     download_file(url, file)
@@ -483,7 +483,7 @@ def shell(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def files(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/Files.7z?sign=V31ULZ50ojVncJSgfBallgxPpmjqv5_iXf_HQJuxyIE=:0"
+    url="https://pan.xgj.qzz.io/d/Baidu/root/Files.7z?sign=sy_wutIs9Fm_xTqIQYA7aTogejuyXQlqtN_TCTlEWhQ=:0"
     file="files.7z"
     logger.info("Begin task files")
     download_file(url, file)
@@ -492,7 +492,7 @@ def files(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def dll(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/dll.7z?sign=jLaJqCQqD75wAKsmoOja7YsY0ShFV9dZl0TEJIR0Zmo=:0"#5
+    url="https://pan.xgj.qzz.io/d/Baidu/root/dll.7z?sign=WmRLoMDd10JUDliy7HuNwjxznRYt6ubenxqnkuojYcA=:0"#5
     file="dll.7z"
     logger.info("Begin task dll")
     download_file(url, file)
@@ -501,7 +501,7 @@ def dll(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def ND03(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/ND03.7z?sign=9sKN0gBnPt0bbjoWuufEyYzjXSXTSsKq_EcDG4fD_Hw=:0"
+    url="https://pan.xgj.qzz.io/d/Baidu/root/ND03.7z?sign=-AOss8O3ixGtuL7uaNslr4TCebqDXkXJB2Nbead3dtI=:0"
     file="ND03.7z"
     logger.info("Begin task ND03")
     download_file(url, file)
@@ -510,7 +510,7 @@ def ND03(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def conf(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/Conf.7z?sign=-i7OwoX56sSFWqda2P71NZR1QUPf1QHbq2Xp5udGnM0=:0"#1
+    url="https://pan.xgj.qzz.io/d/Baidu/root/Conf.7z?sign=FYmwr9nE6CU5aAjL3uv-DAsO2YbHDSv9qkEc8q378WI=:0"#11
     file="conf.7z"
     logger.info("Begin task conf")
     download_file(url, file)
@@ -519,7 +519,7 @@ def conf(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def other(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/Other.7z?sign=yaFYvOjON3XN3WfXGmrwKKrNaAK5ewQQydMvwXdoSGM=:0"#4
+    url="https://pan.xgj.qzz.io/d/Baidu/root/Other.7z?sign=w_ZIpI6zFsUXZgC9FLB4C8iKt3gampQwxmdNafyx-lc=:0"#41
     file="other.7z"
     logger.info("Begin task other")
     download_file(url, file)
@@ -528,7 +528,7 @@ def other(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def wipe(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/wipe.7z?sign=oeFihkkdjLK_oKPHnu-hvYtl7mGsLD109emy_RV4RSw=:0"#3
+    url="https://pan.xgj.qzz.io/d/Baidu/root/wipe.7z?sign=oVT-lU0wH2q7Mtt3ihkwo5ie9G_TsQXVrOScS8B7wfg=:0"#31
     file="wipe.7z"
     logger.info("Begin task wipe")
     download_file(url, file)
@@ -537,7 +537,7 @@ def wipe(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def exe(need_pause: bool = True):
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/exe.7z?sign=vChl-_WUgokPcQiNKkI9Y3XM3u7dGFqmVQZkl1DVrhI=:0"#6
+    url="https://pan.xgj.qzz.io/d/Baidu/root/exe.7z?sign=vU1OKKOzwkSlG_Ui33XDuwrrUpx8OrNXi5YKKqf4EGg=:0"#61
     file="exe.7z"
     logger.info("Begin task exe")
     download_file(url, file)
@@ -546,7 +546,7 @@ def exe(need_pause: bool = True):
     if need_pause:
         pause_hint()
 def unlock():
-    url="https://pan.xgj.qzz.io/d/123alldown-webdav/unlock.7z?sign=7vNi8ArDfchFDhM8yw4YR39vlhvAEeohlP0hNVGWt2A=:0"#7
+    url="https://pan.xgj.qzz.io/d/Baidu/root/unlock.7z?sign=6ISDsXdRoHicCJUYFQ2TpDoNwK2gQ4o8ELmzb2X3W3g=:0"#7
     file="unlock.7z"
     logger.info("Begin task unlock")
     download_file(url, file)
