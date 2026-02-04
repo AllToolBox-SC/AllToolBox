@@ -35,5 +35,4 @@ source/
 /FileDialog/obj
 node_modules/
 docs/.vitepress/cache
-
-
+/flutter
