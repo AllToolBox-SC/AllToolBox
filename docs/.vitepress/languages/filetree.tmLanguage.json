@@ -1,0 +1,10 @@
+{
+  "name": "filetree",
+  "scopeName": "source.filetree",
+  "patterns": [
+    {
+      "match": "#.*$",
+      "name": "comment.line.filetree"
+    }
+  ]
+}
