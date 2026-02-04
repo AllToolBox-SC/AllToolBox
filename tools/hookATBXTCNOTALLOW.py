@@ -104,6 +104,9 @@ def main():
     if args.lock:
         lines = set_conf_key(lines, "persist.xtc_allow_lock_True", "True")
     write_conf_lines(conf_path, lines)
+    print("已将 persist.atb.xtc.allow 设置为 True")
+    if args.lock:
+        print("已将 persist.xtc_allow_lock_True 设置为 True")
 
 
 if __name__ == "__main__":
