@@ -26,6 +26,7 @@ from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.mouse_events import MouseEventType, MouseButton
+from flash_ak3 import AnyKernel3
 import colorama
 import subprocess
 import socket
@@ -91,6 +92,12 @@ file_handler.setLevel(logging.DEBUG)
 formatter = MultilineFormatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
+
+
+class BreakOut(Exception):
+    pass
+
+
 
 
 def page_transition(text: str = "", duration: float = 0.35) -> None:
@@ -511,6 +518,99 @@ def run(cmd):
                     endlocal 1>nul 2>nul &
                     '''.replace("\n", "").replace(20*" ", "")])
 
+
+@onerror
+def flash_anykernel3(ak3_path, boot_path):
+    global logger
+    try:
+        ak3 = AnyKernel3(ak3_path)
+        ak3.extract_zip()
+        ak3.unpack_bootimg(boot_path, "./tmp/boot_unpacked")
+        ak3.rename_mainfile()
+        ak3.patch_bootimg()
+        ak3.repack_bootimg(repack_to="./tmp/boot_patched.img")
+        ak3.clean_up()
+        os.remove("./tmp/kernel")
+    except Exception as e:
+        logger.error(traceback.format_exc())
+        return 1
+
+
+def flash_partation(imgpath: str, part: Optional[str] = "boot"):
+    run("device_check.exe fastboot"); print("\n")
+    run(f"fastboot.exe flash {part} {imgpath}")
+
+@onerror
+def anykernel3():
+    global style
+    paths = ["/dev/block/by-name/", "/dev/block/bootdevice/by-name"]
+    print_formatted_text(HTML(warn+"目前仅支持boot.img修补，并可能存在未知问题！"), style=style)
+    result = choose(message="", options=[
+        ("A", "返回上级菜单"),
+        ("1", "A-only槽位"),
+        ("2", "AB分区-A槽位"),
+        ("3", "AB分区-B槽位")
+    ], default="A")
+    match result:
+        case "A":
+            clear(); return
+        case "1":
+            run("adb start-server 1>nul")
+            run("device_check.exe adb"); print_formatted_text("\n", style=style)
+            for i in paths:
+                process = subprocess.run(["adb.exe", "shell", f"su -c \"dd if={i}boot of=/sdcard/boot.img bs=2048"], )
+                if process.returncode == 0:
+                    break
+            process = subprocess.run(["adb.exe", "pull", "/sdcard/boot.img", "./tmp/boot.img"])
+            if process.returncode != 0:
+                print_formatted_text(HTML(error+"提取Boot失败"))
+                return 1
+            print_formatted_text(HTML(info+"请加载AnyKernel3 Zip"), style=style)
+            run("call sel file s .")
+            with open("./tmp/output.txt", "r", encoding="utf-8") as f:
+                filepath = f.read().rstrip("\r\n").rstrip("\n")
+                flash_anykernel3(filepath, "./tmp/boot.img")
+                flash_partation("./tmp/boot_patched.img", "boot")
+            print_formatted_text(HTML(info+"刷入成功"), style=style)
+        case "2":
+            run("adb start-server 1>nul")
+            run("device_check.exe adb"); print_formatted_text("\n", style=style)
+            for i in paths:
+                process = subprocess.run(["adb.exe", "shell", f"su -c \"dd if={i}boot_a of=/sdcard/boot.img bs=2048"], )
+                if process.returncode == 0:
+                    break
+            process = subprocess.run(["adb.exe", "pull", "/sdcard/boot.img", "./tmp/boot.img"])
+            if process.returncode != 0:
+                print_formatted_text(HTML(error+"提取Boot失败"))
+                return 1
+            print_formatted_text(HTML(info+"请加载AnyKernel3 Zip"), style=style)
+            run("call sel file s .")
+            with open("./tmp/output.txt", "r", encoding="utf-8") as f:
+                filepath = f.read().rstrip("\r\n").rstrip("\n")
+                flash_anykernel3(filepath, "./tmp/boot.img")
+                flash_partation("./tmp/boot_patched.img", "boot_a")
+            print_formatted_text(HTML(info+"刷入成功"), style=style)
+
+        case "3":
+            run("adb start-server 1>nul")
+            run("device_check.exe adb"); print_formatted_text("\n", style=style)
+            for i in paths:
+                process = subprocess.run(["adb.exe", "shell", f"su -c \"dd if={i}boot_b of=/sdcard/boot.img bs=2048"], )
+                if process.returncode == 0:
+                    break
+            process = subprocess.run(["adb.exe", "pull", "/sdcard/boot.img", "./tmp/boot.img"])
+            if process.returncode != 0:
+                print_formatted_text(HTML(error+"提取Boot失败"))
+                return 1
+            print_formatted_text(HTML(info+"请加载AnyKernel3 Zip"), style=style)
+            run("call sel file s .")
+            with open("./tmp/output.txt", "r", encoding="utf-8") as f:
+                filepath = f.read().rstrip("\r\n").rstrip("\n")
+                flash_anykernel3(filepath, "./tmp/boot.img")
+                flash_partation("./tmp/boot_patched.img", "boot_b")
+            print_formatted_text(HTML(info+"刷入成功"), style=style)
+    anykernel3()
+    
 @onerror
 def root():
     global allow_xtc
@@ -548,6 +648,8 @@ def root():
             run("call otherroot.bat 3")
     root()
     
+
+
 
 @onerror
 def appset():
@@ -669,15 +771,16 @@ def commonly():
             #text="请选择",
             options=[
                 ("A", "返回上级菜单"),
-                ("1", "ADB/自检校验码计算"),
-                ("2", "离线OTA升级"),
-                ("3", "刷入TWRP"),
-                ("4", "刷入XTC Patch"),
+                ("1", "小天才-ADB/自检校验码计算"),
+                ("2", "小天才-离线OTA升级"),
+                ("3", "小天才-刷入TWRP"),
+                ("4", "小天才-刷入XTC Patch"),
                 ("5", "备份与恢复"),
-                ("6", "安卓8.1root后优化"),
-                ("7", "进入qmmi[9008]"),
+                ("6", "小天才-安卓8.1root后优化"),
+                ("7", "小天才-进入qmmi[9008]"),
                 ("8", "scrcpy投屏"),
                 ("9", "高级重启"),
+                ("10", "刷入AnyKernel3[实验性]")
             ],
             default="A"
         )
@@ -691,9 +794,10 @@ def commonly():
                 ("2", "离线OTA升级"),
                 ("3", "刷入TWRP"),
                 ("5", "备份与恢复"),
-                ("7", "进入qmmi[9008]"),
+                ("7", "小天才-进入qmmi[9008]"),
                 ("8", "scrcpy投屏"),
                 ("9", "高级重启"),
+                ("10", "刷入AnyKernel3[实验性]")
             ],
             default="A"
         )
@@ -720,6 +824,8 @@ def commonly():
             run("call scrcpy-ui.bat")
         case "9":
             run("call rebootpro")
+        case "10":
+            clear(); anykernel3()
         case _:
             print_formatted_text(HTML(error + "输入错误，请重新输入"), style=style)
     commonly()
