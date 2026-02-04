@@ -1262,7 +1262,7 @@ def pre_main() -> bool:
         try:
             if CURRENT_BUILD_META.get("persist.xtc_allow_lock_True") == "True":
                 allow_xtc = True
-            elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("True", "1", "yes", "y"):
+            elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("true", "1", "yes", "y"):
                 allow_xtc = True
             elif debug_features_allowed(CURRENT_BUILD_META):
                 allow_xtc = True
