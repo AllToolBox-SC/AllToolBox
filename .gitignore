@@ -34,3 +34,4 @@ source/
 *.obj
 *.o
 /FileDialog/obj
+/flutter
