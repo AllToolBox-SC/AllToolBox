@@ -1,5 +1,5 @@
 @echo off
-set OUTFILE=C:\Users\47268\AllToolBox\cmd_bg_output.txt
+set OUTFILE=%USERPROFILE%\AllToolBox\cmd_bg_output.txt
 
 
 
