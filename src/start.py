@@ -35,7 +35,9 @@ import filehash
 import json
 import traceback
 from pathlib import Path
-
+from pluginutils import (
+    load
+)
 try:
     import debughook
 except ImportError:

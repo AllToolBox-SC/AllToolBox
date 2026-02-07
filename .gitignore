@@ -12,7 +12,6 @@ target/
 *.tmp
 *.bak
 *.pyc
-*.lock
 *.spec
 __pycache__/
 /start.spec
@@ -34,4 +33,6 @@ source/
 *.obj
 *.o
 /FileDialog/obj
+node_modules/
+docs/.vitepress/cache
 /flutter
