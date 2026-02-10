@@ -4,10 +4,10 @@ setup(
     name='pluginutils',
     version='0.1.0',
     packages=find_packages(),
-    install_requires=[],
+    install_requires=["py7zr", "cryptography"],
     author='ATB',  
     author_email='',
-    description='AndroidToolBox PDK',
+    description='AndroidToolBox Embed-PDK',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: GPLv3 License',

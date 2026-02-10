@@ -1,8 +1,13 @@
+# If you only use the nuitka build, you can remove this(pyinstaller)
 pyinstaller==6.17.0
 py7zr==1.0.0
 tqdm==4.67.1
 requests==2.32.5
+# TUI framework & colorful outputs
 prompt_toolkit==3.0.52
 colorama==0.4.6
+# If you only use the pyinstaller build, you can remove this
 nuitka==2.8.9
+# Verification require this
 filehash==0.2.dev1
+# cryptography==46.0.4 ; TODO: Verify Signature Required

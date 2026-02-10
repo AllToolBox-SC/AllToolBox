@@ -34,10 +34,9 @@ import requests
 import filehash
 import json
 import traceback
+import pluginutils, pluginutils.load, pluginutils.manage
 from pathlib import Path
-from pluginutils import (
-    load
-)
+
 try:
     import debughook
 except ImportError:
@@ -96,10 +95,9 @@ file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
 
+
 class BreakOut(Exception):
     pass
-
-
 
 
 def page_transition(text: str = "", duration: float = 0.35) -> None:
@@ -449,10 +447,12 @@ def menu() -> str:
                 print_formatted_text(f"{i}. {item}", style=style)
                 i += 1
     else:
-        print_formatted_text(HTML(warn + "扩展文件夹没有创建，正在创建..."), style=style)
+        # print_formatted_text(HTML(warn + "扩展文件夹没有创建，正在创建..."), style=style)
         os.remove("mod") if os.path.isfile("mod") else ...
         os.makedirs("mod", exist_ok=True)
     kb = KeyBindings()
+
+    # Tip: 已弃用旧版主菜单
     # @kb.add('R')
     # def _(event):
     #     event.app.exit(result="SHIFT_R")
@@ -461,14 +461,6 @@ def menu() -> str:
     def _(event):
         event.app.exit(result="SHIFT_D")
 
-
-    
-    # style = Style.from_dict(
-    #     {
-    #         "number": "bold",
-    #         "selected-option": "underline bold",
-    #     }
-    # )
     print_formatted_text(ANSI("鼠标双击或按回车键确定，方向键，数字键，鼠标单击来选择功能"))
     def header_click():
         global ENV_HEADER_CLICK_COUNT
@@ -651,8 +643,6 @@ def root():
     root()
     
 
-
-
 @onerror
 def appset():
     global style, allow_xtc
@@ -699,6 +689,7 @@ def appset():
     if result == "5":
         run("call z10openinst")
     appset()
+
 
 @onerror
 def userdebug():
@@ -761,6 +752,7 @@ def userdebug():
     if result == "8":
         run("call friend")
     userdebug()
+
 
 @onerror
 def commonly():
@@ -832,9 +824,9 @@ def commonly():
             print_formatted_text(HTML(error + "输入错误，请重新输入"), style=style)
     commonly()
 
+
 @onerror
 def magisk():
-
     global style
     clear()
     run("call logo")
@@ -907,6 +899,7 @@ def debug():
             time.sleep(1)
     debug()
 
+
 @onerror
 def sel():
     clear()
@@ -914,6 +907,7 @@ def sel():
     run("pause")
     run("call sel file m .")
     run("pause")
+
 
 @onerror
 def color():
@@ -993,6 +987,7 @@ def help_menu():
         
     help_menu()
 
+
 def load_mod_menu():
     mod_dir = ".\\mod"
     if not os.path.isdir(mod_dir):
@@ -1032,6 +1027,7 @@ def load_mod_menu():
 def run_mod_main(modname):
     run(f'cd /d mod\\{modname} && call main.bat')
 
+
 @onerror
 def mod():
     clear()
@@ -1063,6 +1059,7 @@ def mod():
         run("call unmod")
 
     mod()
+
 
 @onerror
 def about():
@@ -1144,8 +1141,7 @@ def pre_main() -> bool:
     global logger
     global DEBUG
     global BUILD_CONF_PATH, CURRENT_BUILD_META
-    run("@echo off")
-    run("setlocal enabledelayedexpansion")
+    run("@echo off & setlocal enabledelayedexpansion")
     # subprocess.run(["chcp", "65001"], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # print_formatted_text(HTML(info + "正在启动中..."), style=style)
     colorama.init(autoreset=True)
@@ -1323,27 +1319,29 @@ def pre_main() -> bool:
     clear()
     return True
 
+
 def check_adb_server() -> Tuple[bool, Optional[Exception]: None]:
     adb_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    adb_server.settimeout(0.25)
+    # ADB Server request timeout: fast 0.2, usually 0.25, default 0.3, slowly 0.6
+    adb_server.settimeout(0.3)
     try:
         adb_server.connect(("127.0.0.1", 5037))
     except socket.timeout:
-        return False
+        return ( False )
     except Exception as e:
         return False, e
     adb_server.close()
-    return True
+    return ( True )
+
 
 @onerror
 def cleanup(code: int = 0):
     global style
     print_formatted_text(HTML(info + "正在结束ADB服务..."), style=style)
-    if check_adb_server():
+    if check_adb_server()[0]:
         subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
-
-
     sys.exit(code)
+
 
 @onerror
 def main() -> int:
@@ -1351,21 +1349,23 @@ def main() -> int:
     global flag
     global key
     global style
-    global BUILD_CONF_PATH, CURRENT_BUILD_META
+    global BUILD_CONF_PATH
+    global CURRENT_BUILD_META
     build_meta, meta_found, conf_path = load_build_metadata()
     BUILD_CONF_PATH = conf_path
     CURRENT_BUILD_META = build_meta
     debug_allowed =  debug_features_allowed(build_meta) if meta_found else True
-    not_allowed_msg = "ATB not allow start debug menu. Please ask ATB-Team"
     try:
         if not meta_found:
             logger.warning("BUILD.CONF 丢失")
         def handle_action(action: str) -> None:
             match action:
                 case "root":
-                    clear(); run("call root.bat"); clear()
+                    clear()
+                    run("call root.bat"); clear()
                 case "openshell":
-                    clear(); subprocess.run(["cmd.exe", "/k"], shell=True); clear()
+                    clear()
+                    subprocess.run(["cmd.exe", "/k"], shell=True); clear()
                 case "about": about()
                 case "mods": mod()
                 case "commonly": commonly()
@@ -1373,15 +1373,12 @@ def main() -> int:
                 case "man-apps": appset()
                 case "magisk-mod": magisk()
                 case "help-links": help_menu()
-                case _:
-                    pass
+                case _: pass
 
         # Start interactive (UI/menu) flow. Run pre-main checks once.
         pre_ok = pre_main() if not flag else True
-        if not pre_ok:
-            return 1
-        clear()
-        run("call logo")
+        if not pre_ok: return 1
+        clear(); run("call logo")
 
         result = menu()
         match result:
@@ -1402,7 +1399,8 @@ def main() -> int:
             case "magisk-mod": magisk()
             case "help-links":  help_menu()
             case "exit": return 0
-        return main() # loop
+        main() # loop
+
     except KeyboardInterrupt:
         if key: 
             print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
@@ -1412,9 +1410,10 @@ def main() -> int:
                 print_formatted_text(HTML("\n" + warn + "检测到用户中断，正在退出..."), style=style)
                 return 0
             key = True
-            clear()
-            return main()
+            clear(); main()
 
 
 if __name__ == "__main__":
-    cleanup(main())
+    result = main()
+    logger.debug("ATBExitEvent, main returned: ", str(result))
+    cleanup(result)
