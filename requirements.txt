@@ -6,6 +6,7 @@ requests==2.32.5
 # TUI framework & colorful outputs
 prompt_toolkit==3.0.52
 colorama==0.4.6
+rich==13.7.1
 # If you only use the pyinstaller build, you can remove this
 nuitka==2.8.9
 # Verification require this

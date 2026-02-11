@@ -10,8 +10,10 @@ import shutil
 import argparse
 import colorama
 import time
+import threading
 from datetime import datetime, timezone, timedelta
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def pick_python_exe():
@@ -27,13 +29,68 @@ def pick_python_exe():
     return sys.executable
 
 
+class GradleProgressBar:
+    """Class to simulate Gradle-style progress output"""
+    def __init__(self, total_tasks):
+        self.total_tasks = total_tasks
+        self.completed_tasks = 0
+        self.task_names = []
+        self.active_tasks = set()
+        self.lock = threading.Lock()
+        self.running = True
+        self.term_height = os.get_terminal_size().lines
+        self.thread = threading.Thread(target=self._refresh_loop)
+        self.thread.daemon = True
+        self.thread.start()
+        
+    def add_task(self, task_name):
+        with self.lock:
+            if task_name not in self.task_names:
+                self.task_names.append(task_name)
+    
+    def start_task(self, task_name):
+        with self.lock:
+            self.active_tasks.add(task_name)
+    
+    def complete_task(self, task_name):
+        with self.lock:
+            if task_name in self.active_tasks:
+                self.active_tasks.remove(task_name)
+            # Count completed tasks by checking which task names appear in completed list
+            self.completed_tasks = len([name for name in self.task_names if name not in self.active_tasks])
+            if self.completed_tasks == self.total_tasks:
+                self.running = False
+                self.thread.join()
+    
+    def _refresh_loop(self):
+        while self.running:
+            self._update_display()
+            time.sleep(1)
+    
+    def _update_display(self):
+        with self.lock:
+            # Calculate progress
+            bar_length = 50
+            filled_length = int(bar_length * self.completed_tasks // max(self.total_tasks, 1)) if self.total_tasks > 0 else 0
+            bar = '█' * filled_length + '-' * (bar_length - filled_length)
+
+            # Print progress bar on single line
+            active_count = len(self.active_tasks)
+            active_str = ', '.join(self.active_tasks) if self.active_tasks else 'IDLE'
+            completed = [task for task in self.task_names if task not in self.active_tasks]
+            completed_str = ', '.join(completed[-3:]) if completed else ''
+            progress_line = f"Build Progress |{bar}| > ExtInfo: {active_count} threads | Active: {active_str} | Completed: {completed_str}"
+            
+            # Save cursor position, move to bottom, print progress, restore cursor
+            print(f"\033[s\033[{self.term_height};1H{progress_line}\033[K\033[u", end='', flush=True)
+
 
 def onerror(func):
     def handler(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(colorama.Fore.RED + "E: " + colorama.Fore.RESET + f"Error during {func.__name__}: {e}")
+            print(colorama.Fore.RED + "E: " + colorama.Fore.RESET + f"Error during {func.__name__}: {e}", file=sys.__stdout__)
             sys.exit(1)
             
     return handler
@@ -153,12 +210,15 @@ def download_dependency():
     response = requests.get(url, stream=True)
     if response.status_code == 200:
         total_size = int(response.headers.get('content-length', 0))
+        rows = os.get_terminal_size().lines
         with open("bin.7z", "wb") as f, tqdm(
             desc="Downloading",
             total=total_size,
             unit='iB',
             unit_scale=True,
             unit_divisor=1024,
+            position=rows-1,
+            leave=False
         ) as bar:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -187,26 +247,52 @@ def run_step(cmd, bar, **kwargs):
             line = line_bytes.decode('utf-8', errors='replace')
         tqdm.write(line.rstrip())
     p.wait()
-    bar.update(1)
+    # bar.update(1)
     if p.returncode != 0:
         raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
 
 
+def run_python_compilation_task(cmd, src_script, exe_name, bar):
+    """Helper function to run a Python compilation task and update the progress bar"""
+    # Update the description for this specific task
+    rows = os.get_terminal_size().lines
+    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
+        p = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
+            bufsize=1
+        )
+        for line_bytes in p.stdout:
+            try:
+                line = line_bytes.decode('gbk')
+            except UnicodeDecodeError:
+                line = line_bytes.decode('utf-8', errors='replace')
+            tqdm.write(line.rstrip())
+        p.wait()
+        task_bar.update(1)
+        if p.returncode != 0:
+            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+    # Update the main progress bar after task completion
+    bar.update(1)
+
+
 @onerror
-def main(python_builder: int, profile: int, bmode: str, platform: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None, meta_inputs: dict[str, str | None]):
-    print("Build script running...")
-    print("Release build") if profile == 0 else print("Debug Build")
+def main(python_builder: int, profile: int, bmode: str, platform: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None, meta_inputs: dict[str, str | None], max_threads: int = 4):
+    custom_write("Build script running...")
+    custom_write("Release build") if profile == 0 else custom_write("Debug Build")
     os.environ["PYTHONUTF8"] = "1"
     if not os.path.exists("./src/FileDialog/FileDialog.csproj"):
-        print("找不到 FileDialog.csproj， 请递归克隆仓库。git clone --recurse-submodules <repo_url>")
+        custom_write("找不到 FileDialog.csproj， 请递归克隆仓库。git clone --recurse-submodules <repo_url>")
         return 1
     upx_dir = find_upx_dir()
     if upx_dir:
-        print(f"Using UPX at: {upx_dir}")
+        custom_write(f"Using UPX at: {upx_dir}")
     else:
-        print("UPX not found, skipping UPX compression (set UPX_DIR to enable).")
+        custom_write("UPX not found, skipping UPX compression (set UPX_DIR to enable).")
     rust_toolset = get_rust_target_triple()
-    print(f"Rust target triple: {rust_toolset}")
+    custom_write(f"Rust target triple: {rust_toolset}")
     dotnet_hint_dirs: list[str] = []
     dotnet_root = os.getenv("DOTNET_ROOT")
     if dotnet_root:
@@ -481,6 +567,9 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         venv.create("./.venv312", with_pip=True)
         python_exe = os.path.join("./.venv312", "Scripts", "python.exe")
 
+    # Initialize Gradle-style progress bar
+    gradle_bar = GradleProgressBar(9)  # Total number of major build steps
+    
     steps = [
         "windres",
         "g++",
@@ -493,97 +582,108 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         "extract",
     ]
 
-    with tqdm(
-        total=len(steps),
-        desc="Setting up ATB",
-        unit="step",
-        ncols=80,
-        position=0,
-        leave=True
-    ) as bar:
+    # Remove the tqdm progress bar since we're using the Gradle-style progress bar
+    # with tqdm(
+    #     total=len(steps),
+    #     desc="Setting up ATB",
+    #     unit="step",
+    #     ncols=80,
+    #     position=0,
+    #     leave=True
+    # ) as bar:
 
         
 
         
-        if not builder:
-            bar.set_description("Generating ICON Source")
+    if not builder:
+        print("Generating ICON Source")
+        gradle_bar.start_task(":generate-icon-source")
 
-            run_step(
-                [windres, "-i", "./src/launch.rc", "-o", "./build/icon.o"],
-                bar
-            )
-            bar.set_description("Building launcher")
-            run_step(
-                [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
-                "-o", "build/main/双击运行.exe".encode("utf-8"),
-                "-finput-charset=UTF-8", "-fexec-charset=GBK",
-                "-lstdc++", "-lpthread", "-O3", gxx_arch_flag],
-                bar
-            ) if profile == 0 else run_step(
-                [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
-                "-o", "build/main/双击运行.exe".encode("utf-8"),
-                "-finput-charset=UTF-8", "-fexec-charset=GBK",
-                "-lstdc++", "-lpthread", "-Og", gxx_arch_flag],
-                bar
-            )
-        elif builder == 1:
-            bar.set_description("Generating ICON Source")
-            rc_include_flags = []
-            for p in include_parts:
-                # Pack /I with the path (quoted when needed) as a single arg so spaces are handled.
-                rc_include_flags.append(f"/I\"{p}\"") if " " in p else rc_include_flags.append(f"/I{p}")
-            rc_path = rc
-            if not rc_path and msvc_bin_override:
-                candidate = os.path.join(msvc_bin_override, "rc.exe")
-                if os.path.isfile(candidate):
-                    rc_path = candidate
-            if not rc_path:
-                rc_path = "rc.exe"
-            print(f"Using rc: {rc_path}")
-            run_step(
-                [rc_path, "/nologo", "/fo", "build\\icon.res", *rc_include_flags, "src\\launch.rc"],
-                bar
-            )
-            cvtres_path = cvtres
-            if not cvtres_path and msvc_bin_override:
-                candidate = os.path.join(msvc_bin_override, "cvtres.exe")
-                if os.path.isfile(candidate):
-                    cvtres_path = candidate
-            if not cvtres_path:
-                cvtres_path = "cvtres.exe"
-            print(f"Using cvtres: {cvtres_path}")
-            run_step(
-                [cvtres_path, f"/MACHINE:{msvc_machine}", "/out:build\\icon.obj", "build\\icon.res"],
-                bar
-            )
-            bar.set_description("Building launcher")
-            cl_path = cl
-            if not cl_path and msvc_bin_override:
-                candidate = os.path.join(msvc_bin_override, "cl.exe")
-                if os.path.isfile(candidate):
-                    cl_path = candidate
-            if not cl_path:
-                cl_path = "cl.exe"
-            print(f"Using cl: {cl_path}")
-            lib_flags = []
-            for lp in lib_parts:
-                lib_flags.append(f"/LIBPATH:{lp}")
-            run_step(
-                [cl_path, "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
-                bar
-            ) if profile == 0 else run_step(
-                [cl_path, "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
-                bar
-            )
+        run_step(
+            [windres, "-i", "./src/launch.rc", "-o", "./build/icon.o"],
+            None  # No progress bar for this step since we're using gradle_bar
+        )
+        gradle_bar.complete_task(":generate-icon-source")
+        print("Building launcher")
+        gradle_bar.start_task(":build-launcher")
+        run_step(
+            [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+            "-o", "build/main/双击运行.exe".encode("utf-8"),
+            "-finput-charset=UTF-8", "-fexec-charset=GBK",
+            "-lstdc++", "-lpthread", "-O3", gxx_arch_flag],
+            None  # No progress bar for this step since we're using gradle_bar
+        ) if profile == 0 else run_step(
+            [gxx, "-Wall", "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
+            "-o", "build/main/双击运行.exe".encode("utf-8"),
+            "-finput-charset=UTF-8", "-fexec-charset=GBK",
+            "-lstdc++", "-lpthread", "-Og", gxx_arch_flag],
+            None  # No progress bar for this step since we're using gradle_bar
+        )
+        gradle_bar.complete_task(":build-launcher")
+    elif builder == 1:
+        print("Generating ICON Source")
+        gradle_bar.start_task(":generate-icon-source")
+        rc_include_flags = []
+        for p in include_parts:
+            # Pack /I with the path (quoted when needed) as a single arg so spaces are handled.
+            rc_include_flags.append(f"/I\"{p}\"") if " " in p else rc_include_flags.append(f"/I{p}")
+        rc_path = rc
+        if not rc_path and msvc_bin_override:
+            candidate = os.path.join(msvc_bin_override, "rc.exe")
+            if os.path.isfile(candidate):
+                rc_path = candidate
+        if not rc_path:
+            rc_path = "rc.exe"
+        print(f"Using rc: {rc_path}")
+        run_step(
+            [rc_path, "/nologo", "/fo", "build\\icon.res", *rc_include_flags, "src\\launch.rc"],
+            None  # No progress bar for this step since we're using gradle_bar
+        )
+        cvtres_path = cvtres
+        if not cvtres_path and msvc_bin_override:
+            candidate = os.path.join(msvc_bin_override, "cvtres.exe")
+            if os.path.isfile(candidate):
+                cvtres_path = candidate
+        if not cvtres_path:
+            cvtres_path = "cvtres.exe"
+        print(f"Using cvtres: {cvtres_path}")
+        run_step(
+            [cvtres_path, f"/MACHINE:{msvc_machine}", "/out:build\\icon.obj", "build\\icon.res"],
+            None  # No progress bar for this step since we're using gradle_bar
+        )
+        gradle_bar.complete_task(":generate-icon-source")
+        print("Building launcher")
+        gradle_bar.start_task(":build-launcher")
+        cl_path = cl
+        if not cl_path and msvc_bin_override:
+            candidate = os.path.join(msvc_bin_override, "cl.exe")
+            if os.path.isfile(candidate):
+                cl_path = candidate
+        if not cl_path:
+            cl_path = "cl.exe"
+        print(f"Using cl: {cl_path}")
+        lib_flags = []
+        for lp in lib_parts:
+            lib_flags.append(f"/LIBPATH:{lp}")
+        run_step(
+            [cl_path, "/MT", "/EHsc", "/Fobuild/launch.obj", "src\\launch.cpp", ".\\build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/O2", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
+            None  # No progress bar for this step since we're using gradle_bar
+        ) if profile == 0 else run_step(
+            [cl_path, "/MTd", "/EHsc", "/DEBUG", "/Zi", "/Fobuild/launch.obj", "/Fdbuild/main/双击运行.pdb", "src\\launch.cpp", "build\\icon.obj", "/source-charset:utf-8", "/execution-charset:gbk", "/Fe:build\\main\\双击运行.exe", "/Od", "/link", f"/MACHINE:{msvc_machine}", *lib_flags, "advapi32.lib", "user32.lib", "shell32.lib"],
+            None  # No progress bar for this step since we're using gradle_bar
+        )
+        gradle_bar.complete_task(":build-launcher")
 
-        bar.set_description("Installing requirements")
+        print("Installing requirements")
+        gradle_bar.start_task(":install-requirements")
         run_step(
             [python_exe, "-m", "pip", "install", "-r", "requirements.txt"],
-            bar
+            None  # No progress bar for this step since we're using gradle_bar
         )
+        gradle_bar.complete_task(":install-requirements")
 
         if python_builder == 1:
-            bar.set_description("Preparing Nuitka")
+            print("Preparing Nuitka")
             gcc = os.path.dirname(
                 subprocess.run(
                     ["cmd", "/c", "where", "gcc.exe"],
@@ -595,142 +695,106 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             if not os.path.exists(nuitka_gcc):
                 os.makedirs(nuitka_gcc, exist_ok=True)
                 os.symlink(gcc, nuitka_gcc + r"\bin")
-            if profile == 0:
-                bar.set_description("run_cmd.py -> run_cmd.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                        "src/run_cmd.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
-                    bar
-                )
+            
+            # Define the Python compilation tasks
+            python_scripts = [
+                ("run_cmd.py", "run_cmd.exe"),
+                ("repair.py", "repair.exe"),
+                ("menu.py", "menu.exe"),
+                ("start.py", "main.exe")
+            ]
+            
+            # Determine the number of threads to use for Nuitka compilation (max 2 to prevent OOM)
+            nuitka_max_threads = min(max_threads, 2)
+            
+            # Prepare commands based on profile
+            commands = []
+            for src_script, exe_name in python_scripts:
+                if profile == 0:  # Release build
+                    cmd = [python_exe, "-m", "nuitka",
+                           "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
+                           f"src/{src_script}", nuitka_compiler_flag, "--nofollow-import-to=debughook"]
+                else:  # Debug build
+                    cmd = [python_exe, "-m", "nuitka",
+                           "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
+                           f"src/{src_script}", nuitka_compiler_flag, "--include-module=debughook"]
+                commands.append((cmd, src_script, exe_name))
 
-                bar.set_description("repair.py -> repair.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                        "src/repair.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
-                    bar
-                )
+            # Execute Python compilation tasks in parallel with limited threads for Nuitka
+            with ThreadPoolExecutor(max_workers=nuitka_max_threads) as executor:
+                futures = []
+                for cmd, src_script, exe_name in commands:
+                    gradle_bar.start_task(f":nuitka:{src_script.replace('.py', '')}")
+                    future = executor.submit(run_python_compilation_task, cmd, src_script, exe_name, None)  # No progress bar for this step since we're using gradle_bar
+                    futures.append(future)
 
-                bar.set_description("menu.py -> menu.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                        "src/menu.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
-                    bar
-                )
-                
-                bar.set_description("start.py -> main.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=yes", "--output-dir=./build/py/dist",
-                        "src/start.py", nuitka_compiler_flag, "--nofollow-import-to=debughook"],
-                    bar
-                )
-            else:
-                bar.set_description("run_cmd.py -> run_cmd.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                    "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                    "src/run_cmd.py", nuitka_compiler_flag, "--include-module=debughook"],
-                    bar
-                )
-                bar.set_description("repair.py -> repair.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                        "src/repair.py", nuitka_compiler_flag, "--include-module=debughook"],
-                    bar
-                )
-
-                bar.set_description("menu.py -> menu.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                        "src/menu.py", nuitka_compiler_flag, "--include-module=debughook"],
-                    bar
-                )
-                
-                bar.set_description("start.py -> main.exe")
-                run_step(
-                    [python_exe, "-m", "nuitka",
-                        "--onefile", "--lto=no", "--output-dir=./build/py/dist", "--debug", "--no-debug-c-warnings", "--debugger",
-                        "src/start.py", nuitka_compiler_flag, "--include-module=debughook"],
-                    bar
-                )
+                # Wait for all tasks to complete
+                for future in as_completed(futures):
+                    future.result()  # This will raise any exceptions that occurred during execution
+                    # Note: The task completion is handled inside run_python_compilation_task
         else:
-            if profile == 0:
-                bar.set_description("run_cmd.py -> run_cmd.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
-                    bar
-                )
-                bar.set_description("repair.py -> repair.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
-                    bar
-                )
+            # Define the Python compilation tasks for PyInstaller
+            python_scripts = [
+                ("run_cmd.py", "run_cmd.exe"),
+                ("repair.py", "repair.exe"),
+                ("menu.py", "menu.exe"),
+                ("start.py", "main.exe")
+            ]
 
-                bar.set_description("menu.py -> menu.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/menu.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
-                    bar
-                )
-                
-                bar.set_description("start.py -> main.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/start.py", "./build/py/dist", debug=False, upx_dir=upx_dir),
-                    bar
-                )
-            else:
-                bar.set_description("run_cmd.py -> run_cmd.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/run_cmd.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
-                    bar
-                )
-                bar.set_description("repair.py -> repair.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/repair.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
-                    bar
-                )
+            # Prepare commands based on profile
+            commands = []
+            for src_script, exe_name in python_scripts:
+                if profile == 0:  # Release build
+                    cmd = pyinstaller_cmd(python_exe, f"src/{src_script}", "./build/py/dist", debug=False, upx_dir=upx_dir)
+                else:  # Debug build
+                    cmd = pyinstaller_cmd(python_exe, f"src/{src_script}", "./build/py/dist", debug=True, upx_dir=upx_dir)
+                commands.append((cmd, src_script, exe_name))
 
-                bar.set_description("menu.py -> menu.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/menu.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
-                    bar
-                )
-                
-                bar.set_description("start.py -> main.exe")
-                run_step(
-                    pyinstaller_cmd(python_exe, "src/start.py", "./build/py/dist", debug=True, upx_dir=upx_dir),
-                    bar
-                )
+            # Execute Python compilation tasks in parallel with full thread count for PyInstaller
+            with ThreadPoolExecutor(max_workers=max_threads) as executor:
+                futures = []
+                for cmd, src_script, exe_name in commands:
+                    gradle_bar.start_task(f":pyinstaller:{src_script.replace('.py', '')}")
+                    future = executor.submit(run_python_compilation_task, cmd, src_script, exe_name, None)  # No progress bar for this step since we're using gradle_bar
+                    futures.append(future)
 
-        bar.set_description("Building Rust Sources")
+                # Wait for all tasks to complete
+                for future in as_completed(futures):
+                    future.result()  # This will raise any exceptions that occurred during execution
+                    # Note: The task completion is handled inside run_python_compilation_task
+
+        print("Building Rust Sources")
+        gradle_bar.start_task(":rust:build")
         run_step(
             ["cargo", "build", "--release", "--target-dir", "./build/rust"],
-            bar,
+            None,  # No progress bar for this step since we're using gradle_bar
             shell=True
         ) if profile == 0 else run_step(
             ["cargo", "build", "--target-dir", "./build/rust"],
-            bar,
+            None,  # No progress bar for this step since we're using gradle_bar
             shell=True
         )
+        gradle_bar.complete_task(":rust:build")
 
-        bar.set_description("Building FileDialog")
+        print("Building FileDialog")
+        gradle_bar.start_task(":filedialog:build")
         run_step(
             [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
-            bar
+            None  # No progress bar for this step since we're using gradle_bar
         ) if profile == 0 else run_step(
             [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
-            bar
+            None  # No progress bar for this step since we're using gradle_bar
         )
+        gradle_bar.complete_task(":filedialog:build")
 
-        bar.set_description("Extracting Binaries")
+        print("Extracting Binaries")
+        gradle_bar.start_task(":extract:binaries")
         with py7zr.SevenZipFile('bin.7z', mode='r') as z:
             z.extractall(path='./build/main/bin')
-        bar.update(1)
+        gradle_bar.complete_task(":extract:binaries")
 
+    # Move copy operations to the end of the build process
+    gradle_bar.start_task(":copy:files")
     src = "./src/bats/"
     dst = "./build/main/bin"
     for root, _, files in os.walk(src):
@@ -740,6 +804,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             dst_path = os.path.join(dst, rel)
             os.makedirs(os.path.dirname(dst_path), exist_ok=True)
             shutil.copy2(src_path, dst_path)
+    gradle_bar.complete_task(":copy:files")
 
     def find_py_output(names):
         dist = "./build/py/dist"
@@ -771,16 +836,18 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             print(f" - {m}")
         print("PyInstaller/Nuitka likely failed earlier. Check build output above.")
         return 1
+    
+    gradle_bar.start_task(":copy:executables")
     shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
     shutil.copy2(outputs["repair"], "./build/main/bin/repair.exe")
     shutil.copy2(outputs["menu"], "./build/main/bin/menu.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe", "./build/main/bin/FileDialog.exe")
     shutil.copy2("./build/FileDialog/FileDialog.exe.config", "./build/main/bin/FileDialog.exe.config")
-
-    
+    gradle_bar.complete_task(":copy:executables")
 
     if profile == 1:
+        gradle_bar.start_task(":copy:pdb-files")
         shutil.copy2("./build/FileDialog/FileDialog.pdb", "./build/main/bin/FileDialog.pdb")
         if bmode == "msvc":
             try:
@@ -800,7 +867,9 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                         shutil.copy2(src_pdb, f"./build/main/bin/{pdb}")
             except Exception as e:
                 print(f"Warning: Failed to copy PDB files: {e}")
+        gradle_bar.complete_task(":copy:pdb-files")
 
+    gradle_bar.start_task(":copy:rust-binaries")
     rust_out = "./build/rust/release" if profile == 0 else "./build/rust/debug"
     rust_bins = {
         "jsonutil.exe": os.path.join(rust_out, "jsonutil.exe"),
@@ -811,7 +880,9 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             shutil.copy2(src_path, f"./build/main/bin/{name}")
         else:
             print(f"Warning: Rust output not found: {src_path}")
+    gradle_bar.complete_task(":copy:rust-binaries")
 
+    gradle_bar.start_task(":write:metadata")
     metadata = collect_build_metadata(meta_inputs)
     conf_dir = os.path.join("./build/main/bin", "conf")
     os.makedirs(conf_dir, exist_ok=True)
@@ -828,9 +899,89 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     with open(conf_path, "w", encoding="utf-8") as f:
         f.write("\n".join(conf_lines))
     print(f"Build metadata written to {conf_path}")
+    gradle_bar.complete_task(":write:metadata")
 
     print("Build completed.")
     return 0
+
+
+def run_python_compilation_task(cmd, src_script, exe_name, bar):
+    """Helper function to run a Python compilation task and update the progress bar"""
+    # Update the description for this specific task
+    rows = os.get_terminal_size().lines
+    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
+        p = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
+            bufsize=1
+        )
+        for line_bytes in p.stdout:
+            try:
+                line = line_bytes.decode('gbk')
+            except UnicodeDecodeError:
+                line = line_bytes.decode('utf-8', errors='replace')
+            tqdm.write(line.rstrip())
+        p.wait()
+        task_bar.update(1)
+        if p.returncode != 0:
+            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+    # Update the main progress bar after task completion
+    if bar:
+        bar.update(1)
+
+
+def run_python_compilation_task_with_gradle(cmd, src_script, exe_name, gradle_bar_instance):
+    """Helper function to run a Python compilation task with Gradle-style progress tracking"""
+    task_name = f":compile-python:{src_script.replace('.py', '')}"
+    gradle_bar_instance.start_task(task_name)
+    
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=False,
+        bufsize=1
+    )
+    for line_bytes in p.stdout:
+        try:
+            line = line_bytes.decode('gbk')
+        except UnicodeDecodeError:
+            line = line_bytes.decode('utf-8', errors='replace')
+        tqdm.write(line.rstrip())
+    p.wait()
+    
+    gradle_bar_instance.complete_task(task_name)
+    if p.returncode != 0:
+        raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+
+
+def run_python_compilation_task(cmd, src_script, exe_name, bar):
+    """Helper function to run a Python compilation task and update the progress bar"""
+    # Update the description for this specific task
+    rows = os.get_terminal_size().lines
+    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
+        p = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=False,
+            bufsize=1
+        )
+        for line_bytes in p.stdout:
+            try:
+                line = line_bytes.decode('gbk')
+            except UnicodeDecodeError:
+                line = line_bytes.decode('utf-8', errors='replace')
+            tqdm.write(line.rstrip())
+        p.wait()
+        task_bar.update(1)
+        if p.returncode != 0:
+            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+    # Update the main progress bar after task completion
+    if bar:
+        bar.update(1)
 
 
 if __name__ == "__main__":
@@ -911,7 +1062,13 @@ if __name__ == "__main__":
         default=None,
         help="Override MSVC include directory (used to resolve std headers like stdarg.h)"
     )
-    
+    parser.add_argument(
+        "--max-threads",
+        type=int,
+        default=4,
+        help="Maximum number of threads to use for compilation (default: 4)"
+    )
+
     parser.add_argument("--ro-build-type", type=str, default=None, help="Value for ro.build.type")
     parser.add_argument("--ro-build-version", type=str, default=None, help="Value for ro.build.version")
     parser.add_argument("--ro-product-current-softversion", type=str, default=None, help="Value for ro.product.current.softversion")
@@ -921,8 +1078,9 @@ if __name__ == "__main__":
     parser.add_argument("--persist-atb-xtc-allow", type=str, default=None, help="Set persist.atb.xtc.allow in build.conf (True/False)")
     colorama.init(autoreset=True)
     args = parser.parse_args()
-    
-
+    def custom_write(s):
+        print(s)
+    tqdm.write = custom_write
     if args.nuitka:
         pybuilder = 1
     else:
@@ -946,4 +1104,4 @@ if __name__ == "__main__":
         "persist.atb.xtc.allow": args.persist_atb_xtc_allow,
     }
 
-    sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs))
+    sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs, args.max_threads))
