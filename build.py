@@ -11,9 +11,14 @@ import argparse
 import colorama
 import time
 import threading
+import queue
 from datetime import datetime, timezone, timedelta
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+CURRENT_BAR = None  # 全局引用，便于日志输出后刷新进度行
+DISPLAY = None  # 全局显示管理器
+LOG_PATH = os.path.join("./build", "build.log")
 
 
 def pick_python_exe():
@@ -29,60 +34,180 @@ def pick_python_exe():
     return sys.executable
 
 
+def log_line(text: str):
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(text + "\n")
+
+
+class DisplayManager:
+    """单独渲染线程：固定高度进度块始终在底部，日志嵌入进度区内。"""
+    FIXED_HEIGHT = 10  # 固定块高度，不足补空行，多余截断
+
+    def __init__(self):
+        self.q: queue.SimpleQueue = queue.SimpleQueue()
+        self.progress_lines: list[str] = []
+        self.recent_logs: list[str] = []
+        self.last_frame: str = ""
+        self.drawn = False  # 是否已经画过第一帧
+        self.running = True
+        self._cols = 80  # 终端列数缓存
+        try:
+            self._cols = os.get_terminal_size().columns
+        except OSError:
+            pass
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
+
+    def log(self, text: str):
+        self.q.put(("log", text))
+
+    def set_progress(self, lines: list[str]):
+        self.q.put(("progress", lines))
+
+    def stop(self):
+        self.running = False
+        self.q.put(("stop", None))
+        self.thread.join(timeout=2)
+        # 最终清理：移回并清除进度块
+        if self.drawn:
+            sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F\033[J")
+            sys.stdout.flush()
+
+    def _truncate(self, s: str) -> str:
+        """截断到终端宽度 - 1，防止自动换行导致光标错位。"""
+        max_w = self._cols - 1
+        if len(s) > max_w:
+            return s[:max_w - 3] + "..."
+        return s
+
+    def _build_frame(self) -> list[str]:
+        """构建固定高度的帧内容，所有行截断到终端宽度。"""
+        lines = list(self.progress_lines)
+        if self.recent_logs:
+            lines.append("─── Log ───")
+            lines.extend(self.recent_logs[-3:])
+        # 截断每一行
+        lines = [self._truncate(ln) for ln in lines]
+        # 固定高度：不足补空行，多余截断
+        while len(lines) < self.FIXED_HEIGHT:
+            lines.append("")
+        return lines[:self.FIXED_HEIGHT]
+
+    def _render(self):
+        frame = self._build_frame()
+        frame_str = "\n".join(frame)
+        if frame_str == self.last_frame:
+            return  # 帧一致不重绘
+        # 上移到块起始位置
+        if self.drawn:
+            sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F")
+        # 逐行覆写+清行尾
+        for ln in frame:
+            sys.stdout.write("\r" + ln + "\033[K\n")
+        sys.stdout.flush()
+        self.drawn = True
+        self.last_frame = frame_str
+
+    def _drain_queue(self) -> bool:
+        """批量排空队列，返回是否遇到 stop 消息。"""
+        while True:
+            try:
+                msg, payload = self.q.get_nowait()
+            except queue.Empty:
+                return False
+            if msg == "stop":
+                return True
+            if msg == "log":
+                self.recent_logs.append(payload)
+                if len(self.recent_logs) > 3:
+                    self.recent_logs.pop(0)
+            elif msg == "progress":
+                self.progress_lines = payload or []
+
+    def _loop(self):
+        while self.running:
+            # 等待至少一条消息（或超时）
+            try:
+                msg, payload = self.q.get(timeout=0.25)
+                if msg == "stop":
+                    break
+                if msg == "log":
+                    self.recent_logs.append(payload)
+                    if len(self.recent_logs) > 3:
+                        self.recent_logs.pop(0)
+                elif msg == "progress":
+                    self.progress_lines = payload or []
+            except queue.Empty:
+                # 超时也刷新一次（保持周期渲染）
+                self._render()
+                continue
+            # 批量排空剩余消息，只渲染最终状态
+            if self._drain_queue():
+                break
+            self._render()
+
+
 class GradleProgressBar:
-    """Class to simulate Gradle-style progress output"""
-    def __init__(self, total_tasks):
+    """Gradle/pip 风格进度条，固定底部显示线程槽位和任务。"""
+    def __init__(self, total_tasks, thread_capacity: int = 4, display: DisplayManager | None = None):
         self.total_tasks = total_tasks
+        self.thread_capacity = max(1, thread_capacity)
         self.completed_tasks = 0
         self.task_names = []
-        self.active_tasks = set()
+        self.active_tasks: list[str] = []  # 保持顺序
         self.lock = threading.Lock()
-        self.running = True
-        self.term_height = os.get_terminal_size().lines
-        self.thread = threading.Thread(target=self._refresh_loop)
-        self.thread.daemon = True
-        self.thread.start()
+        self.last_height = 0  # 上次渲染占用的行数
+        self.display = display
         
     def add_task(self, task_name):
         with self.lock:
-            if task_name not in self.task_names:
-                self.task_names.append(task_name)
+                if task_name not in self.task_names:
+                    self.task_names.append(task_name)
+                # 动态同步 total_tasks
+                self.total_tasks = max(self.total_tasks, len(self.task_names))
     
     def start_task(self, task_name):
         with self.lock:
-            self.active_tasks.add(task_name)
+                if task_name not in self.task_names:
+                    self.task_names.append(task_name)
+                # 动态同步 total_tasks
+                self.total_tasks = max(self.total_tasks, len(self.task_names))
+                if task_name not in self.active_tasks:
+                    self.active_tasks.append(task_name)
     
     def complete_task(self, task_name):
         with self.lock:
             if task_name in self.active_tasks:
                 self.active_tasks.remove(task_name)
-            # Count completed tasks by checking which task names appear in completed list
             self.completed_tasks = len([name for name in self.task_names if name not in self.active_tasks])
-            if self.completed_tasks == self.total_tasks:
-                self.running = False
-                self.thread.join()
-    
-    def _refresh_loop(self):
-        while self.running:
-            self._update_display()
-            time.sleep(1)
+        self._update_display()  # 完成任务后立即刷新进度条
     
     def _update_display(self):
         with self.lock:
-            # Calculate progress
-            bar_length = 50
+            bar_length = 30
             filled_length = int(bar_length * self.completed_tasks // max(self.total_tasks, 1)) if self.total_tasks > 0 else 0
-            bar = '█' * filled_length + '-' * (bar_length - filled_length)
-
-            # Print progress bar on single line
+            bar = '=' * filled_length + '.' * (bar_length - filled_length)
+            percent = int(self.completed_tasks * 100 / max(self.total_tasks, 1))
             active_count = len(self.active_tasks)
-            active_str = ', '.join(self.active_tasks) if self.active_tasks else 'IDLE'
-            completed = [task for task in self.task_names if task not in self.active_tasks]
-            completed_str = ', '.join(completed[-3:]) if completed else ''
-            progress_line = f"Build Progress |{bar}| > ExtInfo: {active_count} threads | Active: {active_str} | Completed: {completed_str}"
-            
-            # Save cursor position, move to bottom, print progress, restore cursor
-            print(f"\033[s\033[{self.term_height};1H{progress_line}\033[K\033[u", end='', flush=True)
+
+            lines = []
+            lines.append(f"Progress [{bar}] {percent:3d}% ({self.completed_tasks}/{self.total_tasks})")
+            lines.append(f"> threads {self.thread_capacity} | active {active_count}")
+
+            # 展示线程槽位；多余线程显示 IDLE
+            for i in range(self.thread_capacity):
+                if i < active_count:
+                    lines.append(f"< {self.active_tasks[i]}")
+                else:
+                    lines.append("< IDLE")
+
+            if self.display:
+                self.display.set_progress(lines)
+
+    def redraw(self):
+        """供外部在产生新日志后重绘状态行。"""
+        self._update_display()
 
 
 def onerror(func):
@@ -170,7 +295,7 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
         val = input(f"请输入 {name}: ").strip()
         if val:
             return val
-        print("值不能为空，请重新输入。")
+        custom_write("值不能为空，请重新输入。")
 
 
 def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]:
@@ -198,7 +323,7 @@ def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]
 def download_dependency():
     url = ""
     if os.path.exists("bin.7z"):
-        print("bin.7z already exists.")
+        custom_write("bin.7z already exists.")
         return True
     if os.path.exists("binary_link.txt"):
         with open("binary_link.txt", "r") as f:
@@ -206,7 +331,7 @@ def download_dependency():
     else:
         url_response = requests.get("https://atb.xgj.qzz.io/other/binary_link.txt")
         url = url_response.text.strip()
-    print(f"Downloading bin.7z from {url} ...")
+    custom_write(f"Downloading bin.7z from {url} ...")
     response = requests.get(url, stream=True)
     if response.status_code == 200:
         total_size = int(response.headers.get('content-length', 0))
@@ -223,10 +348,10 @@ def download_dependency():
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
                 bar.update(len(chunk))
-        print("Downloaded bin.7z successfully.")
+        custom_write("Downloaded bin.7z successfully.")
         return True
     else:
-        print(f"Failed to download bin.7z. Status code: {response.status_code}")
+        custom_write(f"Failed to download bin.7z. Status code: {response.status_code}")
         return False
 
 
@@ -245,41 +370,44 @@ def run_step(cmd, bar, **kwargs):
             line = line_bytes.decode('gbk')
         except UnicodeDecodeError:
             line = line_bytes.decode('utf-8', errors='replace')
-        tqdm.write(line.rstrip())
+        text = line.rstrip()
+        log_line(text)
+        if DISPLAY:
+            DISPLAY.log(text)
     p.wait()
-    # bar.update(1)
     if p.returncode != 0:
         raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
 
 
 def run_python_compilation_task(cmd, src_script, exe_name, bar):
-    """Helper function to run a Python compilation task and update the progress bar"""
-    # Update the description for this specific task
-    rows = os.get_terminal_size().lines
-    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
-        p = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=False,
-            bufsize=1
-        )
-        for line_bytes in p.stdout:
-            try:
-                line = line_bytes.decode('gbk')
-            except UnicodeDecodeError:
-                line = line_bytes.decode('utf-8', errors='replace')
-            tqdm.write(line.rstrip())
-        p.wait()
-        task_bar.update(1)
-        if p.returncode != 0:
-            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
-    # Update the main progress bar after task completion
-    bar.update(1)
+    """运行编译任务，输出走日志不直接写控制台。"""
+    p = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=False,
+        bufsize=1
+    )
+    for line_bytes in p.stdout:
+        try:
+            line = line_bytes.decode('gbk')
+        except UnicodeDecodeError:
+            line = line_bytes.decode('utf-8', errors='replace')
+        text = line.rstrip()
+        log_line(text)
+        if DISPLAY:
+            DISPLAY.log(text)
+    p.wait()
+    if p.returncode != 0:
+        raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
 
 
 @onerror
 def main(python_builder: int, profile: int, bmode: str, platform: str, builder: int, winsdk_dir: str | None, winsdk_include: str | None, mingw_bin_override: str | None, msvc_bin_override: str | None, msvc_include_override: str | None, meta_inputs: dict[str, str | None], max_threads: int = 4):
+    # reset log file
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    with open(LOG_PATH, "w", encoding="utf-8") as _f:
+        _f.write("[build] log start\n")
     custom_write("Build script running...")
     custom_write("Release build") if profile == 0 else custom_write("Debug Build")
     os.environ["PYTHONUTF8"] = "1"
@@ -301,7 +429,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     dotnet_exe = resolve_tool(["dotnet.exe", "dotnet"], extra_dirs=dotnet_hint_dirs)
     if not dotnet_exe:
         raise RuntimeError("dotnet SDK not found. Install .NET SDK (x64) and set DOTNET_ROOT if needed.")
-    print(f"Using dotnet: {dotnet_exe}")
+    custom_write(f"Using dotnet: {dotnet_exe}")
     extra_bins = []
     for env_name in ("MINGW64_BIN", "MSYS2_MINGW64_BIN"):
         v = os.getenv(env_name)
@@ -503,13 +631,13 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
     # Log resolved include/lib paths once for debugging rc/cl/linker lookup
     if include_parts:
-        print("Resolved INCLUDE paths for rc/cl:")
+        custom_write("Resolved INCLUDE paths for rc/cl:")
         for p in include_parts:
-            print(f"  {p}")
+            custom_write(f"  {p}")
     if lib_parts:
-        print("Resolved LIB paths for linker:")
+        custom_write("Resolved LIB paths for linker:")
         for p in lib_parts:
-            print(f"  {p}")
+            custom_write(f"  {p}")
 
     windres = resolve_tool(["windres.exe", "windres"], extra_bins) if builder == 0 else True
     gxx = resolve_tool(["g++.exe", "g++"], extra_bins) if builder == 0 else True
@@ -526,7 +654,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         if not gxx:
             missing.append("g++.exe (MinGW GCC)")
         if not iconv:
-            print("Warning: iconv.exe (MinGW/Extra bin) not found. This may cause encoding issues.")
+            custom_write("Warning: iconv.exe (MinGW/Extra bin) not found. This may cause encoding issues.")
     if builder == 1 or bmode == "msvc":
         if not cl:
             missing.append("cl.exe (MSVC toolchain)")
@@ -540,19 +668,19 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         missing.append("dotnet.exe (.NET SDK)")
 
     if missing:
-        print("Missing required tools:")
+        custom_write("Missing required tools:")
         for m in missing:
-            print(f" - {m}")
-        print("Please install/point MINGW64_BIN to your mingw64/bin (e.g. E:\\mingw64\\bin).")
+            custom_write(f" - {m}")
+        custom_write("Please install/point MINGW64_BIN to your mingw64/bin (e.g. E:\\mingw64\\bin).")
         return 1
     else:
-        print(f"Using windres: {windres}")
-        print(f"Using g++: {gxx}")
+        custom_write(f"Using windres: {windres}")
+        custom_write(f"Using g++: {gxx}")
     if not os.path.exists("bin.7z"):
-        print("Download bin.7z first...")
+        custom_write("Download bin.7z first...")
         result = download_dependency()
         if not result:
-            print("Failed to download dependency.")
+            custom_write("Failed to download dependency.")
             return 1
 
     os.makedirs("build", exist_ok=True)
@@ -561,14 +689,18 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     os.makedirs("./build/rust", exist_ok=True)
 
     python_exe = pick_python_exe()
-    print(f"Using Python: {python_exe}")
+    custom_write(f"Using Python: {python_exe}")
 
     if not (os.path.exists("./.venv312/Scripts/python.exe") or os.path.exists("./.venv/Scripts/python.exe")):
         venv.create("./.venv312", with_pip=True)
         python_exe = os.path.join("./.venv312", "Scripts", "python.exe")
 
-    # Initialize Gradle-style progress bar
-    gradle_bar = GradleProgressBar(9)  # Total number of major build steps
+    # Initialize display manager and progress bar
+    global DISPLAY
+    DISPLAY = DisplayManager()
+    gradle_bar = GradleProgressBar(9, thread_capacity=max_threads, display=DISPLAY)
+    global CURRENT_BAR
+    CURRENT_BAR = gradle_bar
     
     steps = [
         "windres",
@@ -596,7 +728,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
         
     if not builder:
-        print("Generating ICON Source")
+        custom_write("Generating ICON Source")
         gradle_bar.start_task(":generate-icon-source")
 
         run_step(
@@ -604,7 +736,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             None  # No progress bar for this step since we're using gradle_bar
         )
         gradle_bar.complete_task(":generate-icon-source")
-        print("Building launcher")
+        custom_write("Building launcher")
         gradle_bar.start_task(":build-launcher")
         run_step(
             [gxx, "-static", "./src/launch.cpp", "./build/icon.o", "-municode",
@@ -621,7 +753,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         )
         gradle_bar.complete_task(":build-launcher")
     elif builder == 1:
-        print("Generating ICON Source")
+        custom_write("Generating ICON Source")
         gradle_bar.start_task(":generate-icon-source")
         rc_include_flags = []
         for p in include_parts:
@@ -634,7 +766,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 rc_path = candidate
         if not rc_path:
             rc_path = "rc.exe"
-        print(f"Using rc: {rc_path}")
+        custom_write(f"Using rc: {rc_path}")
         run_step(
             [rc_path, "/nologo", "/fo", "build\\icon.res", *rc_include_flags, "src\\launch.rc"],
             None  # No progress bar for this step since we're using gradle_bar
@@ -646,13 +778,13 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 cvtres_path = candidate
         if not cvtres_path:
             cvtres_path = "cvtres.exe"
-        print(f"Using cvtres: {cvtres_path}")
+        custom_write(f"Using cvtres: {cvtres_path}")
         run_step(
             [cvtres_path, f"/MACHINE:{msvc_machine}", "/out:build\\icon.obj", "build\\icon.res"],
             None  # No progress bar for this step since we're using gradle_bar
         )
         gradle_bar.complete_task(":generate-icon-source")
-        print("Building launcher")
+        custom_write("Building launcher")
         gradle_bar.start_task(":build-launcher")
         cl_path = cl
         if not cl_path and msvc_bin_override:
@@ -661,7 +793,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 cl_path = candidate
         if not cl_path:
             cl_path = "cl.exe"
-        print(f"Using cl: {cl_path}")
+        custom_write(f"Using cl: {cl_path}")
         lib_flags = []
         for lp in lib_parts:
             lib_flags.append(f"/LIBPATH:{lp}")
@@ -674,7 +806,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         )
         gradle_bar.complete_task(":build-launcher")
 
-        print("Installing requirements")
+        custom_write("Installing requirements")
         gradle_bar.start_task(":install-requirements")
         run_step(
             [python_exe, "-m", "pip", "install", "-r", "requirements.txt"],
@@ -683,7 +815,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         gradle_bar.complete_task(":install-requirements")
 
         if python_builder == 1:
-            print("Preparing Nuitka")
+            custom_write("Preparing Nuitka")
             gcc = os.path.dirname(
                 subprocess.run(
                     ["cmd", "/c", "where", "gcc.exe"],
@@ -721,17 +853,21 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 commands.append((cmd, src_script, exe_name))
 
             # Execute Python compilation tasks in parallel with limited threads for Nuitka
+            def nuitka_task(cmd, src_script, exe_name):
+                try:
+                    run_python_compilation_task(cmd, src_script, exe_name, None)
+                finally:
+                    gradle_bar.complete_task(f":nuitka:{src_script.replace('.py', '')}")
+
             with ThreadPoolExecutor(max_workers=nuitka_max_threads) as executor:
                 futures = []
                 for cmd, src_script, exe_name in commands:
                     gradle_bar.start_task(f":nuitka:{src_script.replace('.py', '')}")
-                    future = executor.submit(run_python_compilation_task, cmd, src_script, exe_name, None)  # No progress bar for this step since we're using gradle_bar
+                    future = executor.submit(nuitka_task, cmd, src_script, exe_name)
                     futures.append(future)
 
-                # Wait for all tasks to complete
                 for future in as_completed(futures):
-                    future.result()  # This will raise any exceptions that occurred during execution
-                    # Note: The task completion is handled inside run_python_compilation_task
+                    future.result()
         else:
             # Define the Python compilation tasks for PyInstaller
             python_scripts = [
@@ -763,7 +899,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                     future.result()  # This will raise any exceptions that occurred during execution
                     # Note: The task completion is handled inside run_python_compilation_task
 
-        print("Building Rust Sources")
+        custom_write("Building Rust Sources")
         gradle_bar.start_task(":rust:build")
         run_step(
             ["cargo", "build", "--release", "--target-dir", "./build/rust"],
@@ -776,7 +912,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         )
         gradle_bar.complete_task(":rust:build")
 
-        print("Building FileDialog")
+        custom_write("Building FileDialog")
         gradle_bar.start_task(":filedialog:build")
         run_step(
             [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
@@ -787,7 +923,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         )
         gradle_bar.complete_task(":filedialog:build")
 
-        print("Extracting Binaries")
+        custom_write("Extracting Binaries")
         gradle_bar.start_task(":extract:binaries")
         with py7zr.SevenZipFile('bin.7z', mode='r') as z:
             z.extractall(path='./build/main/bin')
@@ -831,10 +967,10 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             missing.append(f"{key} ({' / '.join(names)})")
 
     if missing:
-        print("Missing built executables:")
+        custom_write("Missing built executables:")
         for m in missing:
-            print(f" - {m}")
-        print("PyInstaller/Nuitka likely failed earlier. Check build output above.")
+            custom_write(f" - {m}")
+        custom_write("PyInstaller/Nuitka likely failed earlier. Check build output above.")
         return 1
     
     gradle_bar.start_task(":copy:executables")
@@ -854,7 +990,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 shutil.copy2("build/py/dist/start.pdb", "./build/main/bin/main.pdb")
                 shutil.copy2("build/py/dist/repair.pdb", "./build/main/bin/repair.pdb")
             except Exception as e:
-                print(f"Warning: Failed to copy PDB files: {e}")
+                custom_write(f"Warning: Failed to copy PDB files: {e}")
         if "msvc" in rust_toolset:
             try:
                 pdbs = [
@@ -866,7 +1002,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                     if os.path.isfile(src_pdb):
                         shutil.copy2(src_pdb, f"./build/main/bin/{pdb}")
             except Exception as e:
-                print(f"Warning: Failed to copy PDB files: {e}")
+                custom_write(f"Warning: Failed to copy PDB files: {e}")
         gradle_bar.complete_task(":copy:pdb-files")
 
     gradle_bar.start_task(":copy:rust-binaries")
@@ -879,7 +1015,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         if os.path.isfile(src_path):
             shutil.copy2(src_path, f"./build/main/bin/{name}")
         else:
-            print(f"Warning: Rust output not found: {src_path}")
+            custom_write(f"Warning: Rust output not found: {src_path}")
     gradle_bar.complete_task(":copy:rust-binaries")
 
     gradle_bar.start_task(":write:metadata")
@@ -898,90 +1034,11 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     ]
     with open(conf_path, "w", encoding="utf-8") as f:
         f.write("\n".join(conf_lines))
-    print(f"Build metadata written to {conf_path}")
+    custom_write(f"Build metadata written to {conf_path}")
     gradle_bar.complete_task(":write:metadata")
 
-    print("Build completed.")
+    custom_write("Build completed.")
     return 0
-
-
-def run_python_compilation_task(cmd, src_script, exe_name, bar):
-    """Helper function to run a Python compilation task and update the progress bar"""
-    # Update the description for this specific task
-    rows = os.get_terminal_size().lines
-    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
-        p = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=False,
-            bufsize=1
-        )
-        for line_bytes in p.stdout:
-            try:
-                line = line_bytes.decode('gbk')
-            except UnicodeDecodeError:
-                line = line_bytes.decode('utf-8', errors='replace')
-            tqdm.write(line.rstrip())
-        p.wait()
-        task_bar.update(1)
-        if p.returncode != 0:
-            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
-    # Update the main progress bar after task completion
-    if bar:
-        bar.update(1)
-
-
-def run_python_compilation_task_with_gradle(cmd, src_script, exe_name, gradle_bar_instance):
-    """Helper function to run a Python compilation task with Gradle-style progress tracking"""
-    task_name = f":compile-python:{src_script.replace('.py', '')}"
-    gradle_bar_instance.start_task(task_name)
-    
-    p = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=False,
-        bufsize=1
-    )
-    for line_bytes in p.stdout:
-        try:
-            line = line_bytes.decode('gbk')
-        except UnicodeDecodeError:
-            line = line_bytes.decode('utf-8', errors='replace')
-        tqdm.write(line.rstrip())
-    p.wait()
-    
-    gradle_bar_instance.complete_task(task_name)
-    if p.returncode != 0:
-        raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
-
-
-def run_python_compilation_task(cmd, src_script, exe_name, bar):
-    """Helper function to run a Python compilation task and update the progress bar"""
-    # Update the description for this specific task
-    rows = os.get_terminal_size().lines
-    with tqdm(total=1, desc=f"Compiling {src_script} -> {exe_name}", leave=False, position=rows-1) as task_bar:
-        p = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=False,
-            bufsize=1
-        )
-        for line_bytes in p.stdout:
-            try:
-                line = line_bytes.decode('gbk')
-            except UnicodeDecodeError:
-                line = line_bytes.decode('utf-8', errors='replace')
-            tqdm.write(line.rstrip())
-        p.wait()
-        task_bar.update(1)
-        if p.returncode != 0:
-            raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
-    # Update the main progress bar after task completion
-    if bar:
-        bar.update(1)
 
 
 if __name__ == "__main__":
@@ -1079,7 +1136,13 @@ if __name__ == "__main__":
     colorama.init(autoreset=True)
     args = parser.parse_args()
     def custom_write(s):
-        print(s)
+        log_line(s)
+        if DISPLAY:
+            DISPLAY.log(s)
+        else:
+            # DISPLAY 尚未初始化，直接写终端
+            sys.__stdout__.write(s + "\n")
+            sys.__stdout__.flush()
     tqdm.write = custom_write
     if args.nuitka:
         pybuilder = 1
@@ -1104,4 +1167,13 @@ if __name__ == "__main__":
         "persist.atb.xtc.allow": args.persist_atb_xtc_allow,
     }
 
-    sys.exit(main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs, args.max_threads))
+    ret = 1
+    try:
+        ret = main(pybuilder, profile, bmode, platform, builder, args.winsdk_dir, args.winsdk_include, args.mingw_bin, args.msvc_bin, args.msvc_include, meta_inputs, args.max_threads)
+    finally:
+        try:
+            if DISPLAY:
+                DISPLAY.stop()
+        except Exception:
+            pass
+    sys.exit(ret)
