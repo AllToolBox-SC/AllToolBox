@@ -52,6 +52,7 @@ class DisplayManager:
         self.drawn = False  # 是否已经画过第一帧
         self.running = True
         self._cols = 80  # 终端列数缓存
+        self.paused = False
         try:
             self._cols = os.get_terminal_size().columns
         except OSError:
@@ -73,6 +74,38 @@ class DisplayManager:
         if self.drawn:
             sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F\033[J")
             sys.stdout.flush()
+
+    def pause_for_input(self):
+        """在需要交互输入前清理进度区，保证 prompt 可见。"""
+        # 标记为暂停，停止渲染；清理已绘制的进度块
+        self.paused = True
+        if self.drawn:
+            try:
+                sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F\033[J")
+                sys.stdout.flush()
+            finally:
+                self.drawn = False
+
+    def resume(self):
+        """恢复渲染（在输入后调用）。"""
+        # 解除暂停状态，允许渲染
+        self.paused = False
+        try:
+            self._cols = os.get_terminal_size().columns
+        except OSError:
+            pass
+        # 在渲染前确保光标在新行，避免覆盖刚刚输入的行
+        try:
+            sys.__stdout__.write("\n")
+            sys.__stdout__.flush()
+        except Exception:
+            pass
+        # 强制重绘当前帧
+        try:
+            self.last_frame = ""
+            self._render()
+        except Exception:
+            pass
 
     def _truncate(self, s: str) -> str:
         """截断到终端宽度 - 1，防止自动换行导致光标错位。"""
@@ -142,10 +175,12 @@ class DisplayManager:
                 # 超时也刷新一次（保持周期渲染）
                 self._render()
                 continue
-            # 批量排空剩余消息，只渲染最终状态
+            # 批量排空剩余消息
             if self._drain_queue():
                 break
-            self._render()
+            # 若处于暂停状态则不渲染
+            if not self.paused:
+                self._render()
 
 
 class GradleProgressBar:
@@ -290,22 +325,50 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
     if provided is not None and str(provided).strip() != "":
         return str(provided).strip()
     if default is not None:
+        try:
+            # 只记录到日志文件，不向终端回显
+            log_line(f"{name} = {default}")
+        except Exception:
+            pass
         return default
     while True:
-        prompt = f"请输入 {name}: "
-        # 确保提示写到真实 stdout，以免被 DisplayManager 的 ANSI 覆写吞掉
+        # 在输入前暂停渲染，确保 prompt 可见
         try:
-            sys.__stdout__.write(prompt)
-            sys.__stdout__.flush()
+            if DISPLAY:
+                DISPLAY.pause_for_input()
         except Exception:
-            # 回退到 custom_write 作为兜底
+            pass
+        try:
+            # 直接写到真实 stdout，避免被 DisplayManager 捕获
+            sys.__stdout__.write(f"请输入 {name}: ")
+            sys.__stdout__.flush()
+            line = sys.stdin.readline()
+            if line is None:
+                val = ""
+            else:
+                val = line.strip()
+        finally:
+            # 不在这里恢复渲染，待回显后再恢复
+            pass
+        if val:
+            # 先在真实 stdout 回显输入，保证用户能看到
             try:
-                custom_write(prompt)
+                # 只记录到日志文件，不在终端回显用户输入
+                log_line(f"{name} = {val}")
             except Exception:
                 pass
-        val = input().strip()
-        if val:
+            try:
+                if DISPLAY:
+                    DISPLAY.resume()
+            except Exception:
+                pass
             return val
+        # 空输入，先恢复渲染再提示错误信息
+        try:
+            if DISPLAY:
+                DISPLAY.resume()
+        except Exception:
+            pass
         custom_write("值不能为空，请重新输入。")
 
 
@@ -421,6 +484,11 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         _f.write("[build] log start\n")
     custom_write("Build script running...")
     custom_write("Release build") if profile == 0 else custom_write("Debug Build")
+    # 提前收集元数据（交互式），在进度块创建前完成输入以避免被覆盖
+    try:
+        metadata = collect_build_metadata(meta_inputs)
+    except Exception:
+        metadata = collect_build_metadata(meta_inputs)
     os.environ["PYTHONUTF8"] = "1"
     if not os.path.exists("./src/FileDialog/FileDialog.csproj"):
         custom_write("找不到 FileDialog.csproj， 请递归克隆仓库。git clone --recurse-submodules <repo_url>")
@@ -1030,7 +1098,6 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     gradle_bar.complete_task(":copy:rust-binaries")
 
     gradle_bar.start_task(":write:metadata")
-    metadata = collect_build_metadata(meta_inputs)
     conf_dir = os.path.join("./build/main/bin", "conf")
     os.makedirs(conf_dir, exist_ok=True)
     conf_path = os.path.join(conf_dir, "build.conf")
