@@ -389,7 +389,6 @@ def download_dependency():
         return False
 
 
-@onerror
 def run_step(cmd, bar, **kwargs):
     p = subprocess.Popen(
         cmd,
@@ -410,7 +409,11 @@ def run_step(cmd, bar, **kwargs):
             DISPLAY.log(text)
     p.wait()
     if p.returncode != 0:
-        raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+        error_msg = f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}"
+        log_line(error_msg)
+        if DISPLAY:
+            DISPLAY.log(error_msg)
+        raise RuntimeError(error_msg)
 
 
 def run_python_compilation_task(cmd, src_script, exe_name, bar):
@@ -1085,12 +1088,20 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             custom_write(f"Warning: Rust output not found: {src_path}")
     gradle_bar.complete_task(":copy:rust-binaries")
 
-    # 在写入元数据之前，确保用户可以看到输入提示
+    # 在写入元数据之前，暂停 DisplayManager 以便用户能正常看到输入提示
     custom_write("正在收集构建元数据...")
-    custom_write("如果需要，请输入以下信息：")
-    
+    display_was_active = False
+    if DISPLAY:
+        display_was_active = True
+        DISPLAY.stop()
+    # 清屏后重新打印提示，确保用户能看到
+    sys.__stdout__.write("如果需要，请输入以下信息：\n")
+    sys.__stdout__.flush()
+
     gradle_bar.start_task(":write:metadata")
     metadata = collect_build_metadata(meta_inputs)
+    
+    # 如果之前 DisplayManager 是活动的，现在重新创建一个新的实例（但不一定要启动，因为构建即将完成）
     conf_dir = os.path.join("./build/main/bin", "conf")
     os.makedirs(conf_dir, exist_ok=True)
     conf_path = os.path.join(conf_dir, "build.conf")
