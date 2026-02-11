@@ -151,59 +151,82 @@ class DisplayManager:
 class GradleProgressBar:
     """Gradle/pip 风格进度条，固定底部显示线程槽位和任务。"""
     def __init__(self, total_tasks, thread_capacity: int = 4, display: DisplayManager | None = None):
-        self.total_tasks = total_tasks
+        self.total_tasks = max(1, int(total_tasks or 0))
         self.thread_capacity = max(1, thread_capacity)
-        self.completed_tasks = 0
-        self.task_names = []
-        self.active_tasks: list[str] = []  # 保持顺序
+        self.task_names: list[str] = []
+        self.active_tasks: list[str] = []      # 当前运行中的任务（保持顺序）
+        self.completed_set: set[str] = set()   # 仅记录真实完成任务
         self.lock = threading.Lock()
-        self.last_height = 0  # 上次渲染占用的行数
+        self.last_height = 0
         self.display = display
-        
+        self.last_rendered_content = ""  # 缓存上次渲染的内容，用于比较
+        self._update_display()  # 初始化立即渲染
+
+    def _sync_total_locked(self):
+        self.total_tasks = max(1, len(self.task_names))
+
     def add_task(self, task_name):
         with self.lock:
-                if task_name not in self.task_names:
-                    self.task_names.append(task_name)
-                # 动态同步 total_tasks
-                self.total_tasks = max(self.total_tasks, len(self.task_names))
-    
+            if task_name not in self.task_names:
+                self.task_names.append(task_name)
+                self._sync_total_locked()
+        self._update_display()
+
     def start_task(self, task_name):
         with self.lock:
-                if task_name not in self.task_names:
-                    self.task_names.append(task_name)
-                # 动态同步 total_tasks
-                self.total_tasks = max(self.total_tasks, len(self.task_names))
-                if task_name not in self.active_tasks:
-                    self.active_tasks.append(task_name)
-    
+            if task_name not in self.task_names:
+                self.task_names.append(task_name)
+                self._sync_total_locked()
+            if task_name in self.completed_set:
+                self.completed_set.remove(task_name)
+            if task_name not in self.active_tasks:
+                self.active_tasks.append(task_name)
+        self._update_display()
+
     def complete_task(self, task_name):
         with self.lock:
+            if task_name not in self.task_names:
+                self.task_names.append(task_name)
+                self._sync_total_locked()
             if task_name in self.active_tasks:
                 self.active_tasks.remove(task_name)
-            self.completed_tasks = len([name for name in self.task_names if name not in self.active_tasks])
-        self._update_display()  # 完成任务后立即刷新进度条
-    
+            self.completed_set.add(task_name)
+        self._update_display()
+
     def _update_display(self):
         with self.lock:
+            total = max(1, self.total_tasks)
+            completed = len(self.completed_set)
+
+            if completed < 0:
+                completed = 0
+            if completed > total:
+                completed = total
+
             bar_length = 30
-            filled_length = int(bar_length * self.completed_tasks // max(self.total_tasks, 1)) if self.total_tasks > 0 else 0
+            filled_length = int(bar_length * completed / total)
+            filled_length = max(0, min(bar_length, filled_length))
             bar = '=' * filled_length + '.' * (bar_length - filled_length)
-            percent = int(self.completed_tasks * 100 / max(self.total_tasks, 1))
+            percent = int(completed * 100 / total)
+            percent = max(0, min(100, percent))
             active_count = len(self.active_tasks)
+            active_count = min(active_count, self.thread_capacity)
 
             lines = []
-            lines.append(f"Progress [{bar}] {percent:3d}% ({self.completed_tasks}/{self.total_tasks})")
+            lines.append(f"Progress [{bar}] {percent:3d}% ({completed}/{total})")
             lines.append(f"> threads {self.thread_capacity} | active {active_count}")
 
-            # 展示线程槽位；多余线程显示 IDLE
             for i in range(self.thread_capacity):
                 if i < active_count:
                     lines.append(f"< {self.active_tasks[i]}")
                 else:
                     lines.append("< IDLE")
 
-            if self.display:
-                self.display.set_progress(lines)
+            current_content = "\n".join(lines)
+            if current_content != self.last_rendered_content:
+                self.last_rendered_content = current_content
+                if self.display:
+                    self.display.set_progress(lines)
 
     def redraw(self):
         """供外部在产生新日志后重绘状态行。"""
@@ -698,35 +721,36 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     # Initialize display manager and progress bar
     global DISPLAY
     DISPLAY = DisplayManager()
-    gradle_bar = GradleProgressBar(9, thread_capacity=max_threads, display=DISPLAY)
+    
+    # Calculate total tasks dynamically based on build configuration
+    total_tasks = 0
+    
+    # Base tasks that always run
+    total_tasks += 2  # icon generation and launcher build
+    
+    # Pip install task
+    total_tasks += 1
+    
+    # Python compilation tasks (4 scripts regardless of PyInstaller vs Nuitka)
+    total_tasks += 4
+    
+    # Additional build tasks that run in parallel
+    total_tasks += 3  # rust build, filedialog build, extract binaries
+    
+    # Copy tasks
+    total_tasks += 3  # copy files, copy executables, copy rust binaries
+    
+    # PDB files task (only in debug mode)
+    if profile == 1:  # Only if debug mode
+        total_tasks += 1
+    
+    # Metadata task
+    total_tasks += 1
+    
+    gradle_bar = GradleProgressBar(total_tasks, thread_capacity=max_threads, display=DISPLAY)
     global CURRENT_BAR
     CURRENT_BAR = gradle_bar
     
-    steps = [
-        "windres",
-        "g++",
-        "pip",
-        "nuitka run_cmd",
-        "nuitka repair",
-        "nuitka start",
-        "nuitka menu",
-        "cargo",
-        "extract",
-    ]
-
-    # Remove the tqdm progress bar since we're using the Gradle-style progress bar
-    # with tqdm(
-    #     total=len(steps),
-    #     desc="Setting up ATB",
-    #     unit="step",
-    #     ncols=80,
-    #     position=0,
-    #     leave=True
-    # ) as bar:
-
-        
-
-        
     if not builder:
         custom_write("Generating ICON Source")
         gradle_bar.start_task(":generate-icon-source")
@@ -814,6 +838,40 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         )
         gradle_bar.complete_task(":install-requirements")
 
+        # Execute remaining build tasks in parallel (these can use all threads)
+        def rust_task():
+            custom_write("Building Rust Sources")
+            gradle_bar.start_task(":rust:build")
+            run_step(
+                ["cargo", "build", "--release", "--target-dir", "./build/rust"],
+                None,  # No progress bar for this step since we're using gradle_bar
+                shell=True
+            ) if profile == 0 else run_step(
+                ["cargo", "build", "--target-dir", "./build/rust"],
+                None,  # No progress bar for this step since we're using gradle_bar
+                shell=True
+            )
+            gradle_bar.complete_task(":rust:build")
+
+        def filedialog_task():
+            custom_write("Building FileDialog")
+            gradle_bar.start_task(":filedialog:build")
+            run_step(
+                [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
+                None  # No progress bar for this step since we're using gradle_bar
+            ) if profile == 0 else run_step(
+                [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
+                None  # No progress bar for this step since we're using gradle_bar
+            )
+            gradle_bar.complete_task(":filedialog:build")
+
+        def extract_task():
+            custom_write("Extracting Binaries")
+            gradle_bar.start_task(":extract:binaries")
+            with py7zr.SevenZipFile('bin.7z', mode='r') as z:
+                z.extractall(path='./build/main/bin')
+            gradle_bar.complete_task(":extract:binaries")
+
         if python_builder == 1:
             custom_write("Preparing Nuitka")
             gcc = os.path.dirname(
@@ -854,19 +912,20 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
             # Execute Python compilation tasks in parallel with limited threads for Nuitka
             def nuitka_task(cmd, src_script, exe_name):
+                gradle_bar.start_task(f":nuitka:{src_script.replace('.py', '')}")
                 try:
                     run_python_compilation_task(cmd, src_script, exe_name, None)
                 finally:
                     gradle_bar.complete_task(f":nuitka:{src_script.replace('.py', '')}")
 
-            with ThreadPoolExecutor(max_workers=nuitka_max_threads) as executor:
-                futures = []
+            with ThreadPoolExecutor(max_workers=nuitka_max_threads) as nuitka_executor:
+                nuitka_futures = []
                 for cmd, src_script, exe_name in commands:
-                    gradle_bar.start_task(f":nuitka:{src_script.replace('.py', '')}")
-                    future = executor.submit(nuitka_task, cmd, src_script, exe_name)
-                    futures.append(future)
+                    future = nuitka_executor.submit(nuitka_task, cmd, src_script, exe_name)
+                    nuitka_futures.append(future)
 
-                for future in as_completed(futures):
+                # Wait for all Nuitka tasks to complete
+                for future in as_completed(nuitka_futures):
                     future.result()
         else:
             # Define the Python compilation tasks for PyInstaller
@@ -887,47 +946,44 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 commands.append((cmd, src_script, exe_name))
 
             # Execute Python compilation tasks in parallel with full thread count for PyInstaller
-            with ThreadPoolExecutor(max_workers=max_threads) as executor:
-                futures = []
+            def pyinstaller_task(cmd, src_script, exe_name):
+                gradle_bar.start_task(f":pyinstaller:{src_script.replace('.py', '')}")
+                try:
+                    run_python_compilation_task(cmd, src_script, exe_name, None)
+                finally:
+                    gradle_bar.complete_task(f":pyinstaller:{src_script.replace('.py', '')}")
+
+            with ThreadPoolExecutor(max_workers=max_threads) as py_executor:
+                py_futures = []
                 for cmd, src_script, exe_name in commands:
-                    gradle_bar.start_task(f":pyinstaller:{src_script.replace('.py', '')}")
-                    future = executor.submit(run_python_compilation_task, cmd, src_script, exe_name, None)  # No progress bar for this step since we're using gradle_bar
-                    futures.append(future)
+                    future = py_executor.submit(pyinstaller_task, cmd, src_script, exe_name)
+                    py_futures.append(future)
 
-                # Wait for all tasks to complete
-                for future in as_completed(futures):
+                # Wait for all PyInstaller tasks to complete
+                for future in as_completed(py_futures):
                     future.result()  # This will raise any exceptions that occurred during execution
-                    # Note: The task completion is handled inside run_python_compilation_task
 
-        custom_write("Building Rust Sources")
-        gradle_bar.start_task(":rust:build")
-        run_step(
-            ["cargo", "build", "--release", "--target-dir", "./build/rust"],
-            None,  # No progress bar for this step since we're using gradle_bar
-            shell=True
-        ) if profile == 0 else run_step(
-            ["cargo", "build", "--target-dir", "./build/rust"],
-            None,  # No progress bar for this step since we're using gradle_bar
-            shell=True
-        )
-        gradle_bar.complete_task(":rust:build")
+        # Start the other build tasks in parallel using all available threads
+        other_tasks_executor = ThreadPoolExecutor(max_workers=max_threads)
+        
+        # Submit remaining tasks to thread pool
+        other_futures = []
+        
+        # Rust build
+        other_futures.append(other_tasks_executor.submit(rust_task))
+        
+        # FileDialog build
+        other_futures.append(other_tasks_executor.submit(filedialog_task))
+        
+        # Extract binaries
+        other_futures.append(other_tasks_executor.submit(extract_task))
 
-        custom_write("Building FileDialog")
-        gradle_bar.start_task(":filedialog:build")
-        run_step(
-            [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Release", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
-            None  # No progress bar for this step since we're using gradle_bar
-        ) if profile == 0 else run_step(
-            [dotnet_exe, "build", "./src/FileDialog/FileDialog.csproj", "-c", "Debug", "-o", "./build/FileDialog/", "-p:BaseIntermediateOutputPath=../../build/FileDialog/obj/"],
-            None  # No progress bar for this step since we're using gradle_bar
-        )
-        gradle_bar.complete_task(":filedialog:build")
-
-        custom_write("Extracting Binaries")
-        gradle_bar.start_task(":extract:binaries")
-        with py7zr.SevenZipFile('bin.7z', mode='r') as z:
-            z.extractall(path='./build/main/bin')
-        gradle_bar.complete_task(":extract:binaries")
+        # Wait for all other tasks to complete
+        for future in as_completed(other_futures):
+            future.result()
+        
+        # Shutdown the other tasks executor
+        other_tasks_executor.shutdown(wait=True)
 
     # Move copy operations to the end of the build process
     gradle_bar.start_task(":copy:files")
@@ -1018,6 +1074,10 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             custom_write(f"Warning: Rust output not found: {src_path}")
     gradle_bar.complete_task(":copy:rust-binaries")
 
+    # 在写入元数据之前，确保用户可以看到输入提示
+    custom_write("正在收集构建元数据...")
+    custom_write("如果需要，请输入以下信息：")
+    
     gradle_bar.start_task(":write:metadata")
     metadata = collect_build_metadata(meta_inputs)
     conf_dir = os.path.join("./build/main/bin", "conf")
@@ -1036,6 +1096,13 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         f.write("\n".join(conf_lines))
     custom_write(f"Build metadata written to {conf_path}")
     gradle_bar.complete_task(":write:metadata")
+
+    # 强制将进度条设置为100%
+    gradle_bar.total_tasks = len(gradle_bar.task_names)  # 更新总任务数为实际任务数
+    for task in gradle_bar.task_names:
+        if task not in gradle_bar.completed_set:
+            gradle_bar.completed_set.add(task)
+    gradle_bar._update_display()
 
     custom_write("Build completed.")
     return 0
