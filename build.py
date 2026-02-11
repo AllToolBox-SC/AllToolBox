@@ -292,7 +292,18 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
     if default is not None:
         return default
     while True:
-        val = input(f"请输入 {name}: ").strip()
+        prompt = f"请输入 {name}: "
+        # 确保提示写到真实 stdout，以免被 DisplayManager 的 ANSI 覆写吞掉
+        try:
+            sys.__stdout__.write(prompt)
+            sys.__stdout__.flush()
+        except Exception:
+            # 回退到 custom_write 作为兜底
+            try:
+                custom_write(prompt)
+            except Exception:
+                pass
+        val = input().strip()
         if val:
             return val
         custom_write("值不能为空，请重新输入。")
