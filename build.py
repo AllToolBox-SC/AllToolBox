@@ -16,13 +16,12 @@ from datetime import datetime, timezone, timedelta
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-CURRENT_BAR = None  # 全局引用，便于日志输出后刷新进度行
-DISPLAY = None  # 全局显示管理器
+CURRENT_BAR = None  # Global reference for refreshing progress bar after log output
+DISPLAY = None  # Global display manager instance
 LOG_PATH = os.path.join("./build", "build.log")
 
-
 def pick_python_exe():
-    """Choose python executable preferring .venv312, then .venv, then current."""
+    """Choose Python executable preferring .venv312, then .venv, then current."""
     candidates = [
         os.path.join("./.venv312", "Scripts", "python.exe"),
         os.path.join("./.venv", "Scripts", "python.exe"),
@@ -33,25 +32,25 @@ def pick_python_exe():
             return c
     return sys.executable
 
-
 def log_line(text: str):
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     with open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(text + "\n")
 
-
 class DisplayManager:
-    """单独渲染线程：固定高度进度块始终在底部，日志嵌入进度区内。"""
-    FIXED_HEIGHT = 10  # 固定块高度，不足补空行，多余截断
+    """Dedicated rendering thread: fixed-height progress block always at the bottom, logs embedded within the progress area."""
+    FIXED_HEIGHT = 10  # Fixed block height; pad with empty lines if insufficient, truncate if excessive
 
     def __init__(self):
-        self.q: queue.SimpleQueue = queue.SimpleQueue()
+        # Bounded queue to prevent excessive memory usage due to log overflow
+        self.q: queue.Queue = queue.Queue(maxsize=2000)
         self.progress_lines: list[str] = []
         self.recent_logs: list[str] = []
         self.last_frame: str = ""
-        self.drawn = False  # 是否已经画过第一帧
+        self.drawn = False  # Indicates whether the first frame has been drawn
         self.running = True
-        self._cols = 80  # 终端列数缓存
+        self._cols = 80  # Cached terminal column width
+        self.paused = False
         try:
             self._cols = os.get_terminal_size().columns
         except OSError:
@@ -69,27 +68,57 @@ class DisplayManager:
         self.running = False
         self.q.put(("stop", None))
         self.thread.join(timeout=2)
-        # 最终清理：移回并清除进度块
+        # Note: Do not clear screen here to avoid hiding error messages
+        # Screen clearing is handled separately at successful completion
+
+    def pause_for_input(self):
+        """Clear the progress area before interactive input to ensure the prompt is visible."""
+        # Mark as paused, stop rendering; clear the drawn progress block
+        self.paused = True
         if self.drawn:
-            sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F\033[J")
-            sys.stdout.flush()
+            try:
+                sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F\033[J")
+                sys.stdout.flush()
+            finally:
+                self.drawn = False
+
+    def resume(self):
+        """Resume rendering (call after input)."""
+        # Unpause and allow rendering
+        self.paused = False
+        try:
+            self._cols = os.get_terminal_size().columns
+        except OSError:
+            pass
+        # Ensure the cursor is on a new line before rendering to avoid overwriting input
+        try:
+            sys.__stdout__.write("\n")
+            sys.__stdout__.flush()
+        except Exception:
+            pass
+        # Force redraw of the current frame
+        try:
+            self.last_frame = ""
+            self._render()
+        except Exception:
+            pass
 
     def _truncate(self, s: str) -> str:
-        """截断到终端宽度 - 1，防止自动换行导致光标错位。"""
+        """Truncate to terminal width - 1 to prevent cursor misalignment due to auto-wrapping."""
         max_w = self._cols - 1
         if len(s) > max_w:
             return s[:max_w - 3] + "..."
         return s
 
     def _build_frame(self) -> list[str]:
-        """构建固定高度的帧内容，所有行截断到终端宽度。"""
+        """Construct a fixed-height frame, truncating all lines to terminal width."""
         lines = list(self.progress_lines)
         if self.recent_logs:
             lines.append("─── Log ───")
             lines.extend(self.recent_logs[-3:])
-        # 截断每一行
+        # Truncate each line
         lines = [self._truncate(ln) for ln in lines]
-        # 固定高度：不足补空行，多余截断
+        # Ensure fixed height: pad with empty lines if insufficient, truncate if excessive
         while len(lines) < self.FIXED_HEIGHT:
             lines.append("")
         return lines[:self.FIXED_HEIGHT]
@@ -98,11 +127,11 @@ class DisplayManager:
         frame = self._build_frame()
         frame_str = "\n".join(frame)
         if frame_str == self.last_frame:
-            return  # 帧一致不重绘
-        # 上移到块起始位置
+            return  # Skip redraw if the frame is identical
+        # Move up to the start of the block
         if self.drawn:
             sys.stdout.write(f"\033[{self.FIXED_HEIGHT}F")
-        # 逐行覆写+清行尾
+        # Overwrite each line and clear the end of the line
         for ln in frame:
             sys.stdout.write("\r" + ln + "\033[K\n")
         sys.stdout.flush()
@@ -110,7 +139,7 @@ class DisplayManager:
         self.last_frame = frame_str
 
     def _drain_queue(self) -> bool:
-        """批量排空队列，返回是否遇到 stop 消息。"""
+        """Batch process the queue, returning whether a stop message was encountered."""
         while True:
             try:
                 msg, payload = self.q.get_nowait()
@@ -127,7 +156,7 @@ class DisplayManager:
 
     def _loop(self):
         while self.running:
-            # 等待至少一条消息（或超时）
+            # Wait for at least one message (or timeout)
             try:
                 msg, payload = self.q.get(timeout=0.25)
                 if msg == "stop":
@@ -139,28 +168,29 @@ class DisplayManager:
                 elif msg == "progress":
                     self.progress_lines = payload or []
             except queue.Empty:
-                # 超时也刷新一次（保持周期渲染）
+                # Refresh periodically even on timeout
                 self._render()
                 continue
-            # 批量排空剩余消息，只渲染最终状态
+            # Batch process remaining messages
             if self._drain_queue():
                 break
-            self._render()
-
+            # Skip rendering if paused
+            if not self.paused:
+                self._render()
 
 class GradleProgressBar:
-    """Gradle/pip 风格进度条，固定底部显示线程槽位和任务。"""
+    """Gradle/pip style progress bar, fixed-bottom display of thread slots and tasks."""
     def __init__(self, total_tasks, thread_capacity: int = 4, display: DisplayManager | None = None):
         self.total_tasks = max(1, int(total_tasks or 0))
         self.thread_capacity = max(1, thread_capacity)
         self.task_names: list[str] = []
-        self.active_tasks: list[str] = []      # 当前运行中的任务（保持顺序）
-        self.completed_set: set[str] = set()   # 仅记录真实完成任务
+        self.active_tasks: list[str] = []      # Current running tasks (maintains order)
+        self.completed_set: set[str] = set()   # Only records real completion tasks
         self.lock = threading.Lock()
         self.last_height = 0
         self.display = display
-        self.last_rendered_content = ""  # 缓存上次渲染的内容，用于比较
-        self._update_display()  # 初始化立即渲染
+        self.last_rendered_content = ""  # Cache of last rendered content for comparison
+        self._update_display()  # Initialize immediately
 
     def _sync_total_locked(self):
         self.total_tasks = max(1, len(self.task_names))
@@ -229,7 +259,7 @@ class GradleProgressBar:
                     self.display.set_progress(lines)
 
     def redraw(self):
-        """供外部在产生新日志后重绘状态行。"""
+        """For external use after generating new logs."""
         self._update_display()
 
 
@@ -238,9 +268,23 @@ def onerror(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(colorama.Fore.RED + "E: " + colorama.Fore.RESET + f"Error during {func.__name__}: {e}", file=sys.__stdout__)
+            try:
+                if DISPLAY:
+                    DISPLAY.stop()
+            except Exception:
+                pass
+            try:
+                msg = f"Error during {func.__name__}: {e}"
+                sys.__stdout__.write(colorama.Fore.RED + "E: " + colorama.Fore.RESET + msg + "\n")
+                text = str(e)
+                if "\n" in text:
+                    sys.__stdout__.write("---- details ----\n")
+                    sys.__stdout__.write(text + "\n")
+                sys.__stdout__.write(f"See full log: {LOG_PATH}\n")
+                sys.__stdout__.flush()
+            except Exception:
+                print(f"Error during {func.__name__}: {e}", file=sys.__stdout__)
             sys.exit(1)
-            
     return handler
 
 @onerror
@@ -313,23 +357,49 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
     if provided is not None and str(provided).strip() != "":
         return str(provided).strip()
     if default is not None:
+        try:
+            log_line(f"{name} = {default}")
+        except Exception:
+            pass
         return default
     while True:
-        prompt = f"请输入 {name}: "
-        # 确保提示写到真实 stdout，以免被 DisplayManager 的 ANSI 覆写吞掉
+        # Before input, pause rendering to ensure prompt is visible
         try:
-            sys.__stdout__.write(prompt)
-            sys.__stdout__.flush()
+            if DISPLAY:
+                DISPLAY.pause_for_input()
         except Exception:
-            # 回退到 custom_write 作为兜底
+            pass
+        try:
+            # Directly write to real stdout, avoid being captured by DisplayManager
+            sys.__stdout__.write(f"Enter {name}: ")
+            sys.__stdout__.flush()
+            line = sys.stdin.readline()
+            if line is None:
+                val = ""
+            else:
+                val = line.strip()
+        finally:
+            # Do not resume rendering here, wait for next prompt
+            pass
+        if val:
+            # First echo the input to real stdout, ensure user sees it
             try:
-                custom_write(prompt)
+                log_line(f"{name} = {val}")
             except Exception:
                 pass
-        val = input().strip()
-        if val:
+            try:
+                if DISPLAY:
+                    DISPLAY.resume()
+            except Exception:
+                pass
             return val
-        custom_write("值不能为空，请重新输入。")
+        # Empty input, first resume rendering then prompt error
+        try:
+            if DISPLAY:
+                DISPLAY.resume()
+        except Exception:
+            pass
+        custom_write("Value cannot be empty, please re-enter.")
 
 
 def collect_build_metadata(meta_inputs: dict[str, str | None]) -> dict[str, str]:
@@ -417,7 +487,7 @@ def run_step(cmd, bar, **kwargs):
 
 
 def run_python_compilation_task(cmd, src_script, exe_name, bar):
-    """运行编译任务，输出走日志不直接写控制台。"""
+    """Run compilation task, output goes to log file not directly to console."""
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -425,18 +495,24 @@ def run_python_compilation_task(cmd, src_script, exe_name, bar):
         text=False,
         bufsize=1
     )
+    captured_lines: list[str] = []
     for line_bytes in p.stdout:
         try:
             line = line_bytes.decode('gbk')
         except UnicodeDecodeError:
             line = line_bytes.decode('utf-8', errors='replace')
         text = line.rstrip()
+        captured_lines.append(text)
         log_line(text)
         if DISPLAY:
             DISPLAY.log(text)
     p.wait()
     if p.returncode != 0:
-        raise RuntimeError(f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}")
+        error_tail = "\n".join(captured_lines[-20:])
+        raise RuntimeError(
+            f"Command failed (exit {p.returncode}): {' '.join(map(str, cmd))}"
+            + (f"\nLast output:\n{error_tail}" if error_tail else "")
+        )
 
 
 @onerror
@@ -449,7 +525,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     custom_write("Release build") if profile == 0 else custom_write("Debug Build")
     os.environ["PYTHONUTF8"] = "1"
     if not os.path.exists("./src/FileDialog/FileDialog.csproj"):
-        custom_write("找不到 FileDialog.csproj， 请递归克隆仓库。git clone --recurse-submodules <repo_url>")
+        custom_write("FileDialog.csproj not found, please recursively clone the repo. git clone --recurse-submodules <repo_url>")
         return 1
     upx_dir = find_upx_dir()
     if upx_dir:
@@ -735,36 +811,36 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     # Initialize display manager and progress bar
     global DISPLAY
     DISPLAY = DisplayManager()
-    
+
     # Calculate total tasks dynamically based on build configuration
     total_tasks = 0
-    
+
     # Base tasks that always run
     total_tasks += 2  # icon generation and launcher build
-    
+
     # Pip install task
     total_tasks += 1
-    
+
     # Python compilation tasks (4 scripts regardless of PyInstaller vs Nuitka)
     total_tasks += 4
-    
+
     # Additional build tasks that run in parallel
     total_tasks += 3  # rust build, filedialog build, extract binaries
-    
+
     # Copy tasks
     total_tasks += 3  # copy files, copy executables, copy rust binaries
-    
+
     # PDB files task (only in debug mode)
     if profile == 1:  # Only if debug mode
         total_tasks += 1
-    
+
     # Metadata task
     total_tasks += 1
-    
+
     gradle_bar = GradleProgressBar(total_tasks, thread_capacity=max_threads, display=DISPLAY)
     global CURRENT_BAR
     CURRENT_BAR = gradle_bar
-    
+
     if not builder:
         custom_write("Generating ICON Source")
         gradle_bar.start_task(":generate-icon-source")
@@ -899,7 +975,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             if not os.path.exists(nuitka_gcc):
                 os.makedirs(nuitka_gcc, exist_ok=True)
                 os.symlink(gcc, nuitka_gcc + r"\bin")
-            
+
             # Define the Python compilation tasks
             python_scripts = [
                 ("run_cmd.py", "run_cmd.exe"),
@@ -907,10 +983,10 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
                 ("menu.py", "menu.exe"),
                 ("start.py", "main.exe")
             ]
-            
+
             # Determine the number of threads to use for Nuitka compilation (max 2 to prevent OOM)
             nuitka_max_threads = min(max_threads, 2)
-            
+
             # Prepare commands based on profile
             commands = []
             for src_script, exe_name in python_scripts:
@@ -940,7 +1016,28 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
                 # Wait for all Nuitka tasks to complete
                 for future in as_completed(nuitka_futures):
-                    future.result()
+                    try:
+                        future.result()
+                    except Exception as e:
+                        # Stop progress rendering thread to prevent error messages from being cleared
+                        try:
+                            if DISPLAY:
+                                DISPLAY.stop()
+                        except Exception:
+                            pass
+                        # Write directly to real terminal stdout to ensure visibility
+                        try:
+                            msg = f"Error during Nuitka task: {e}"
+                            sys.__stdout__.write(colorama.Fore.RED + "E: " + colorama.Fore.RESET + msg + "\n")
+                            text = str(e)
+                            if "\n" in text:
+                                sys.__stdout__.write("---- details ----\n")
+                                sys.__stdout__.write(text + "\n")
+                            sys.__stdout__.write(f"See full log: {LOG_PATH}\n")
+                            sys.__stdout__.flush()
+                        except Exception:
+                            print(f"Error during Nuitka task: {e}", file=sys.__stdout__)
+                        raise
         else:
             # Define the Python compilation tasks for PyInstaller
             python_scripts = [
@@ -975,27 +1072,70 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
                 # Wait for all PyInstaller tasks to complete
                 for future in as_completed(py_futures):
-                    future.result()  # This will raise any exceptions that occurred during execution
+                    try:
+                        future.result()
+                    except Exception as e:
+                        # Stop progress rendering thread to prevent error messages from being cleared
+                        try:
+                            if DISPLAY:
+                                DISPLAY.stop()
+                        except Exception:
+                            pass
+                        # Write directly to real terminal stdout to ensure visibility
+                        try:
+                            msg = f"Error during PyInstaller task: {e}"
+                            sys.__stdout__.write(colorama.Fore.RED + "E: " + colorama.Fore.RESET + msg + "\n")
+                            text = str(e)
+                            if "\n" in text:
+                                sys.__stdout__.write("---- details ----\n")
+                                sys.__stdout__.write(text + "\n")
+                            sys.__stdout__.write(f"See full log: {LOG_PATH}\n")
+                            sys.__stdout__.flush()
+                        except Exception:
+                            print(f"Error during PyInstaller task: {e}", file=sys.__stdout__)
+                        raise
 
         # Start the other build tasks in parallel using all available threads
         other_tasks_executor = ThreadPoolExecutor(max_workers=max_threads)
-        
+
         # Submit remaining tasks to thread pool
         other_futures = []
-        
+
         # Rust build
         other_futures.append(other_tasks_executor.submit(rust_task))
-        
+
         # FileDialog build
         other_futures.append(other_tasks_executor.submit(filedialog_task))
-        
+
         # Extract binaries
         other_futures.append(other_tasks_executor.submit(extract_task))
 
         # Wait for all other tasks to complete
         for future in as_completed(other_futures):
-            future.result()
-        
+            try:
+                future.result()
+            except Exception as e:
+                # Stop progress rendering thread to prevent error messages from being cleared
+                try:
+                    if DISPLAY:
+                        DISPLAY.stop()
+                except Exception:
+                    pass
+                # Write directly to real terminal stdout to ensure visibility
+                try:
+                    msg = f"Error during other task: {e}"
+                    sys.__stdout__.write(colorama.Fore.RED + "E: " + colorama.Fore.RESET + msg + "\n")
+                    text = str(e)
+                    if "\n" in text:
+                        sys.__stdout__.write("---- details ----\n")
+                        sys.__stdout__.write(text + "\n")
+                    sys.__stdout__.write(f"See full log: {LOG_PATH}\n")
+                    sys.__stdout__.flush()
+                except Exception:
+                    print(f"Error during other task: {e}", file=sys.__stdout__)
+                # No longer raise exception, let @onerror decorator handle exit logic
+                return 1
+
         # Shutdown the other tasks executor
         other_tasks_executor.shutdown(wait=True)
 
@@ -1042,7 +1182,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             custom_write(f" - {m}")
         custom_write("PyInstaller/Nuitka likely failed earlier. Check build output above.")
         return 1
-    
+
     gradle_bar.start_task(":copy:executables")
     shutil.copy2(outputs["run_cmd"], "./build/main/bin/run_cmd.exe")
     shutil.copy2(outputs["start"], "./build/main/bin/main.exe")
@@ -1088,20 +1228,20 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             custom_write(f"Warning: Rust output not found: {src_path}")
     gradle_bar.complete_task(":copy:rust-binaries")
 
-    # 在写入元数据之前，暂停 DisplayManager 以便用户能正常看到输入提示
-    custom_write("正在收集构建元数据...")
+    # Pause DisplayManager before writing metadata to ensure user can see input prompts
+    custom_write("Collecting build metadata...")
     display_was_active = False
     if DISPLAY:
         display_was_active = True
         DISPLAY.stop()
-    # 清屏后重新打印提示，确保用户能看到
-    sys.__stdout__.write("如果需要，请输入以下信息：\n")
+    # Clear screen and reprint prompt to ensure user can see it
+    sys.__stdout__.write("If needed, please enter the following information:\n")
     sys.__stdout__.flush()
 
     gradle_bar.start_task(":write:metadata")
     metadata = collect_build_metadata(meta_inputs)
-    
-    # 如果之前 DisplayManager 是活动的，现在重新创建一个新的实例（但不一定要启动，因为构建即将完成）
+
+    # If DisplayManager was active before, recreate a new instance (but don't necessarily start it, as build is nearly complete)
     conf_dir = os.path.join("./build/main/bin", "conf")
     os.makedirs(conf_dir, exist_ok=True)
     conf_path = os.path.join(conf_dir, "build.conf")
@@ -1119,8 +1259,8 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     custom_write(f"Build metadata written to {conf_path}")
     gradle_bar.complete_task(":write:metadata")
 
-    # 强制将进度条设置为100%
-    gradle_bar.total_tasks = len(gradle_bar.task_names)  # 更新总任务数为实际任务数
+    # Force progress bar to 100%
+    gradle_bar.total_tasks = len(gradle_bar.task_names)  # Update total tasks to actual count
     for task in gradle_bar.task_names:
         if task not in gradle_bar.completed_set:
             gradle_bar.completed_set.add(task)
@@ -1229,7 +1369,7 @@ if __name__ == "__main__":
         if DISPLAY:
             DISPLAY.log(s)
         else:
-            # DISPLAY 尚未初始化，直接写终端
+            # DISPLAY not initialized yet, write directly to terminal
             sys.__stdout__.write(s + "\n")
             sys.__stdout__.flush()
     tqdm.write = custom_write
