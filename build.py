@@ -370,8 +370,8 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
         except Exception:
             pass
         try:
-            # 直接写到真实 stdout，避免被 DisplayManager 捕获
-            sys.__stdout__.write(f"请输入 {name}: ")
+            # Write directly to real stdout, avoid being captured by DisplayManager
+            sys.__stdout__.write(f"Enter {name}: ")
             sys.__stdout__.flush()
             line = sys.stdin.readline()
             if line is None:
@@ -379,12 +379,12 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
             else:
                 val = line.strip()
         finally:
-            # 不在这里恢复渲染，待回显后再恢复
+            # Don't resume rendering here, wait until echo is done
             pass
         if val:
-            # 先在真实 stdout 回显输入，保证用户能看到
+            # Echo input to real stdout first, to ensure user can see it
             try:
-                # 只记录到日志文件，不在终端回显用户输入
+                # Only record to log file, not to terminal
                 log_line(f"{name} = {val}")
             except Exception:
                 pass
@@ -394,7 +394,7 @@ def _require_value(name: str, provided: str | None, default: str | None = None) 
             except Exception:
                 pass
             return val
-        # 空输入，先恢复渲染再提示错误信息
+        # Empty input, resume rendering first then prompt error message
         try:
             if DISPLAY:
                 DISPLAY.resume()
