@@ -250,7 +250,7 @@ class GradleProgressBar:
                 if i < active_count:
                     lines.append(f"< {self.active_tasks[i]}")
                 else:
-                    lines.append("< IDLE")
+                    lines.append("< " + colorama.Fore.LIGHTBLACK_EX + "IDLE" + colorama.Fore.RESET)
 
             current_content = "\n".join(lines)
             if current_content != self.last_rendered_content:
