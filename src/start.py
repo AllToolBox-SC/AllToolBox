@@ -690,13 +690,13 @@ def root():
             message="一键Root菜单",
             options=[
                 Option("A", "返回上级菜单"),
-                Option("1", "小天才一键Root"),
+                Option("1", "Wear一键Root"),
                 Option("2", "手机通用Root"),
             ],
             default="A"
         )
     else:
-        print_formatted_text(HTML(INFO + "由于版权原因，暂时下线XTCRoot功能，敬请谅解"), style=style)
+        print_formatted_text(HTML(INFO + "由于版权原因，暂时下线部分功能，敬请谅解"), style=style)
         result = choose(
             message="一键Root菜单",
             options=[
@@ -835,13 +835,13 @@ def commonly():
             message="常用合集",
             options=[
                 Option("A", "返回上级菜单"),
-                Option("1", "某天才-ADB/自检校验码计算"),
-                Option("2", "某天才-离线OTA升级"),
-                Option("3", "某天才-刷入TWRP"),
-                Option("4", "某天才-刷入XTC Patch"),
+                Option("1", "ADB/自检校验码计算"),
+                Option("2", "离线OTA升级"),
+                Option("3", "刷入TWRP"),
+                Option("4", "刷入XTC Patch"),
                 Option("5", "备份与恢复"),
-                Option("6", "某天才-安卓8.1root后优化"),
-                Option("7", "某天才-进入qmmi[9008]"),
+                Option("6", "安卓8.1root后优化"),
+                Option("7", "进入qmmi[9008]"),
                 Option("8", "scrcpy投屏"),
                 Option("9", "高级重启"),
                 Option("10", "刷入AnyKernel3[实验性]")
@@ -857,7 +857,7 @@ def commonly():
                 Option("2", "离线OTA升级"),
                 Option("3", "刷入TWRP"),
                 Option("5", "备份与恢复"),
-                Option("7", "某天才-进入qmmi[9008]"),
+                Option("7", "进入qmmi[9008]"),
                 Option("8", "scrcpy投屏"),
                 Option("9", "高级重启"),
                 Option("10", "刷入AnyKernel3[实验性]")
@@ -935,7 +935,7 @@ def debug():
             Option("4", "调整为更新状态"),
             Option("5", "debug sel"),
             Option("6", "切换环境 (release/userdebug)"),
-            Option("7", "允许使用xtc一键root功能"),
+            Option("7", "允许使用部分一键root功能"),
         ],
         default="A"
     )
@@ -967,7 +967,7 @@ def debug():
             time.sleep(1)
         case "7":
             allow_xtc = True
-            print_formatted_text(HTML(INFO + "已允许使用xtc一键root功能"), style=style)
+            print_formatted_text(HTML(INFO + "已允许使用部分一键root功能"), style=style)
             time.sleep(1)
     debug()
 
