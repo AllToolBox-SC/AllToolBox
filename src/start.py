@@ -844,7 +844,8 @@ def commonly():
                 Option("7", "进入qmmi[9008]"),
                 Option("8", "scrcpy投屏"),
                 Option("9", "高级重启"),
-                Option("10", "刷入AnyKernel3[实验性]")
+                Option("10", "刷入AnyKernel3[实验性]"),
+                Option("11", "打开无线调试"),
             ],
             default="A"
         )
@@ -860,7 +861,8 @@ def commonly():
                 Option("7", "进入qmmi[9008]"),
                 Option("8", "scrcpy投屏"),
                 Option("9", "高级重启"),
-                Option("10", "刷入AnyKernel3[实验性]")
+                Option("10", "刷入AnyKernel3[实验性]"),
+                Option("11", "打开无线调试"),
             ],
             default="A"
         )
@@ -891,6 +893,8 @@ def commonly():
         case "10":
             clear()
             anykernel3()
+        case "11":
+            run("call wifiadb")
         case _:
             print_formatted_text(HTML(ERROR + "输入错误，请重新输入"), style=style)
     commonly()
@@ -907,6 +911,7 @@ def magisk():
             Option("A", "返回上级菜单"),
             Option("1", "刷入Magisk模块"),
             # Option("2", "刷入LSPosed-Android8.1机型"),
+            Option("3", "刷入EdXPosed框架"),
         ],
         default="A"
     )
@@ -917,6 +922,8 @@ def magisk():
         run("call userinstmodule")
     if result == "2":
         run("call InstLSPosed810")
+    if result == "3":
+        run("call InstXposed")
     magisk()
 
 
