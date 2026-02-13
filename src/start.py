@@ -101,7 +101,7 @@ class BreakOut(Exception):
     pass
 
 
-# ==================== UTILITY FUNCTIONS ====================
+""" UTILITY FUNCTIONS """
 
 def page_transition(text: str = "", duration: float = 0.35) -> None:
     """Simple console transition animation when switching pages."""
@@ -827,47 +827,30 @@ def userdebug():
 @onerror
 @auto_clear(logo=True, end=True)
 def commonly():
-    global style, allow_xtc
-    clear()
-    run("call logo")
+    commonly_list: List[Option] = [
+        Option("A", "返回上级菜单"),
+        Option("1", "ADB/自检校验码计算"),
+        Option("2", "离线OTA升级"),
+        Option("3", "刷入TWRP"),
+        Option("4", "刷入XTC Patch"),
+        Option("5", "备份与恢复"),
+        Option("6", "安卓8.1root后优化"),
+        Option("7", "进入qmmi[9008]"),
+        Option("8", "scrcpy投屏"),
+        Option("9", "高级重启")
+    ]
+    if DEBUG: commonly_list.append(Option("10", "刷入AnyKernel3[实验性]"))
     if allow_xtc:
         result = choose(
             message="常用合集",
-            options=[
-                Option("A", "返回上级菜单"),
-                Option("1", "ADB/自检校验码计算"),
-                Option("2", "离线OTA升级"),
-                Option("3", "刷入TWRP"),
-                Option("4", "刷入XTC Patch"),
-                Option("5", "备份与恢复"),
-                Option("6", "安卓8.1root后优化"),
-                Option("7", "进入qmmi[9008]"),
-                Option("8", "scrcpy投屏"),
-                Option("9", "高级重启"),
-                Option("11", "打开无线调试"),
-            ]
-            if DEBUG: commonly_list.append(Option("10", "刷入AnyKernel3[实验性]"))
-            if allow_xtc:
-            result = choose(
-                message="常用合集",
-                options=commonly_list,
+            options=commonly_list,
             default="A"
         )
     else:
         print_formatted_text(HTML(INFO + "由于版权原因，暂时下线ADB/自检校验码计算功能，敬请谅解"), style=style)
         result = choose(
             message="常用合集",
-            options=[
-                Option("A", "返回上级菜单"),
-                Option("2", "离线OTA升级"),
-                Option("3", "刷入TWRP"),
-                Option("5", "备份与恢复"),
-                Option("7", "进入qmmi[9008]"),
-                Option("8", "scrcpy投屏"),
-                Option("9", "高级重启"),
-                Option("10", "刷入AnyKernel3[实验性]"),
-                Option("11", "打开无线调试"),
-            ],
+            options=commonly_list,
             default="A"
         )
     match result:
@@ -895,8 +878,6 @@ def commonly():
         case "10":
             clear()
             anykernel3()
-        case "11":
-            run("call wifiadb")
         case _:
             print_formatted_text(HTML(ERROR + "输入错误，请重新输入"), style=style)
     commonly()
@@ -911,7 +892,6 @@ def magisk():
             Option("A", "返回上级菜单"),
             Option("1", "刷入Magisk模块"),
             # Option("2", "刷入LSPosed-Android8.1机型"),
-            Option("3", "刷入EdXPosed框架"),
         ],
         default="A"
     )
@@ -920,8 +900,6 @@ def magisk():
         run("call userinstmodule")
     if result == "2":
         run("call InstLSPosed810")
-    if result == "3":
-        run("call InstXposed")
     magisk()
 
 
