@@ -26,6 +26,7 @@ from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.mouse_events import MouseEventType, MouseButton
+from functools import wraps
 from flash_ak3 import AnyKernel3
 import colorama
 import subprocess
@@ -120,21 +121,33 @@ def page_transition(text: str = "", duration: float = 0.35) -> None:
 
 
 def onerror(fn):
+    @wraps(fn)
     def wrapper(*args, **kwargs):
-        global logger
-        global style
-        global ERROR
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            err_msg = traceback.format_exc()
             logger.error(f"Error in {fn.__name__}: {e}")
-            logger.error(err_msg)
+            logger.exception("msg")
             print_formatted_text(HTML(ERROR + "抱歉，脚本遇到了未经捕获的异常，即将退出..."), style=style)
             print_formatted_text(HTML(INFO + "错误详情已记录到 bin/logs 文件夹中，您可以将该文件发送给技术支持以获取帮助。"), style=style)
             time.sleep(3)
             cleanup(-1)
     return wrapper
+
+
+def auto_clear(fn=None, *, logo=False, end=False):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            clear()
+            if logo:
+                run("call .\\logo.bat")
+            result = func(*args, **kwargs)
+            if end: clear()
+            return result
+        return wrapper
+
+    return decorator(fn) if fn is not None else decorator
 
 
 def run(cmd):
@@ -488,7 +501,6 @@ def choose(message: str, options: Iterable[Option], default: Optional[str] = Non
 
 @onerror
 def menu() -> str:
-    global style
     global ENV_HEADER_CLICK_COUNT, BUILD_CONF_PATH, CURRENT_BUILD_META
     if os.path.exists("mod") and os.path.isdir("mod"):
         print_formatted_text(HTML("已加载扩展列表："), style=style) if len(os.listdir("mod")) != 0 else print_formatted_text(HTML("已加载扩展列表：未加载任何扩展"), style=style)
@@ -525,7 +537,7 @@ def menu() -> str:
 
     # Compose header with embedded softversion if available.
     version_str = CURRENT_BUILD_META.get("ro.product.current.softversion") or ""
-    header = f"XTC AllToolBox {version_str} 控制台&主菜单 by xgj_236" if version_str else "XTC AllToolBox 控制台&主菜单 by xgj_236"
+    header = f"AllToolBox {version_str} 控制台&主菜单 by xgj_236" if version_str else "AllToolBox 控制台&主菜单 by xgj_236"
 
     result = choose(
         message="",
@@ -601,9 +613,9 @@ def flash_partation(imgpath: str, part: Optional[str] = "boot"):
     run(f"fastboot.exe flash {part} {imgpath}")
 
 
+@auto_clear
 @onerror
 def anykernel3():
-    global style
     paths = ["/dev/block/by-name/", "/dev/block/bootdevice/by-name"]
     print_formatted_text(HTML(WARN + "目前仅支持boot.img修补，并可能存在未知问题！"), style=style)
     result = choose(message="", options=[
@@ -680,11 +692,8 @@ def anykernel3():
 """ FEATURE MENU HANDLERS """
 
 @onerror
+@auto_clear(logo=True, end=True)
 def root():
-    global allow_xtc
-    global style
-    clear()
-    run("call logo")
     if allow_xtc:
         result = choose(
             message="一键Root菜单",
@@ -707,7 +716,6 @@ def root():
         )
     match result:
         case "A":
-            clear()
             return
         case "1":
             run("call root.bat")
@@ -717,10 +725,8 @@ def root():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def appset():
-    global style, allow_xtc
-    clear()
-    run("call logo")
     if allow_xtc:
         result = choose(
             message="应用管理菜单",
@@ -747,9 +753,7 @@ def appset():
             ],
             default="A"
         )
-    if result == "A":
-        clear()
-        return
+    if result == "A": return
     if result == "1":
         run("call userinstapp")
     if result == "2":
@@ -764,11 +768,8 @@ def appset():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def userdebug():
-    global style
-    global allow_xtc
-    clear()
-    run("call logo")
     if allow_xtc:
         result = choose(
             message="开发合集",
@@ -801,9 +802,7 @@ def userdebug():
             default="A"
         )
 
-    if result == "A":
-        clear()
-        return
+    if result == "A": return
     if result == "1":
         run("call listbuild")
     if result == "2":
@@ -826,26 +825,25 @@ def userdebug():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def commonly():
-    global style, allow_xtc
-    clear()
-    run("call logo")
+    commonly_list: List[Option] = [
+        Option("A", "返回上级菜单"),
+        Option("1", "ADB/自检校验码计算"),
+        Option("2", "离线OTA升级"),
+        Option("3", "刷入TWRP"),
+        Option("4", "刷入XTC Patch"),
+        Option("5", "备份与恢复"),
+        Option("6", "安卓8.1root后优化"),
+        Option("7", "进入qmmi[9008]"),
+        Option("8", "scrcpy投屏"),
+        Option("9", "高级重启")
+    ]
+    if DEBUG: commonly_list.append(Option("10", "刷入AnyKernel3[实验性]"))
     if allow_xtc:
         result = choose(
             message="常用合集",
-            options=[
-                Option("A", "返回上级菜单"),
-                Option("1", "ADB/自检校验码计算"),
-                Option("2", "离线OTA升级"),
-                Option("3", "刷入TWRP"),
-                Option("4", "刷入XTC Patch"),
-                Option("5", "备份与恢复"),
-                Option("6", "安卓8.1root后优化"),
-                Option("7", "进入qmmi[9008]"),
-                Option("8", "scrcpy投屏"),
-                Option("9", "高级重启"),
-                Option("10", "刷入AnyKernel3[实验性]")
-            ],
+            options=commonly_list,
             default="A"
         )
     else:
@@ -865,9 +863,7 @@ def commonly():
             default="A"
         )
     match result:
-        case "A":
-            clear()
-            return
+        case "A": return
         case "1":
             run("powershell -ExecutionPolicy Bypass -File zj.ps1")
         case "2":
@@ -897,10 +893,8 @@ def commonly():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def magisk():
-    global style
-    clear()
-    run("call logo")
     result = choose(
         message="magisk模块管理",
         options=[
@@ -910,9 +904,7 @@ def magisk():
         ],
         default="A"
     )
-    if result == "A":
-        clear()
-        return
+    if result == "A": return
     if result == "1":
         run("call userinstmodule")
     if result == "2":
@@ -921,10 +913,9 @@ def magisk():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def debug():
-    global style, allow_xtc
-    clear()
-    run("call logo")
+    global allow_xtc
     result = choose(
         message="DEBUG菜单",
         options=[
@@ -940,9 +931,7 @@ def debug():
         default="A"
     )
     match result:
-        case "A":
-            clear()
-            return
+        case "A": return
         case "1":
             color()
         case "2":
@@ -973,10 +962,8 @@ def debug():
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def help_menu():
-    global style, allow_xtc
-    clear()
-    run("call logo")
     if allow_xtc:
         result = choose(
             message="帮助与链接",
@@ -1006,9 +993,7 @@ def help_menu():
             default="A"
         )
     match result:
-        case "A":
-            clear()
-            return
+        case "A": return
         case "1":
             run("start https://www.123865.com/s/Q5JfTd-hEbWH")
         case "2":
@@ -1078,10 +1063,8 @@ def run_mod_main(modname):
 
 
 @onerror
+@auto_clear(logo=True, end=True)
 def mod():
-    clear()
-    run("call logo")
-
     result = choose(
         message="扩展管理",
         options=[
@@ -1092,19 +1075,13 @@ def mod():
         ],
         default="A"
     )
-
-    if result == "A":
-        clear()
-        return
-
+    if result == "A": return
     if result == "1":
         modname = load_mod_menu()
         if modname:
             run_mod_main(modname)
-
     if result == "2":
         run("call mod")
-
     if result == "3":
         run("call unmod")
 
@@ -1114,6 +1091,7 @@ def mod():
 """ MAIN FLOW FUNCTIONS """
 
 @onerror
+@auto_clear(end=True)
 def about():
     print_formatted_text(
         HTML(f"<yellow>{LINE}</yellow>"),
@@ -1199,7 +1177,7 @@ def pre_main() -> bool:
             return False
 
     softver = CURRENT_BUILD_META.get("ro.product.current.softversion") or ""
-    title = f"XTC AllToolBox {softver} by xgj_236" if softver else "XTC AllToolBox by xgj_236"
+    title = f"AllToolBox {softver} by xgj_236" if softver else "AllToolBox by xgj_236"
     set_title(title)
     os.makedirs("mod", exist_ok=True)
     for item in os.listdir("mod"):
@@ -1295,26 +1273,28 @@ def pre_main() -> bool:
         except Exception:
             pass
         run("call upall.bat run")
-        try:
-            if CURRENT_BUILD_META.get("persist.xtc_allow_lock_True") == "True":
-                allow_xtc = True
-            elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("true", "1", "yes", "y"):
-                allow_xtc = True
-            elif debug_features_allowed(CURRENT_BUILD_META):
-                allow_xtc = True
-            else:
-                try:
-                    allow_xtc = requests.get(
-                        "https://atb.xgj.qzz.io/other/xtcpolicy.json",
-                        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36)'},
-                        timeout=8
-                    ).json().get("allowXTC", False)
-                except Exception:
-                    logger.error(traceback.format_exc())
-                    allow_xtc = False
-        except Exception:
-            logger.error(traceback.format_exc())
-            allow_xtc = False
+
+    try:
+        if CURRENT_BUILD_META.get("persist.xtc_allow_lock_True") == "True":
+            allow_xtc = True
+        elif str(CURRENT_BUILD_META.get("persist.atb.xtc.allow", "")).lower() in ("true", "1", "yes", "y"):
+            allow_xtc = True
+        elif debug_features_allowed(CURRENT_BUILD_META):
+            allow_xtc = True
+        else:
+            try:
+                allow_xtc = requests.get(
+                    "https://atb.xgj.qzz.io/other/xtcpolicy.json",
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36)'},
+                    timeout=8
+                ).json().get("allowXTC", False)
+            except Exception:
+                logger.error(traceback.format_exc())
+                allow_xtc = False
+    except Exception:
+        logger.error(traceback.format_exc())
+        allow_xtc = False
+
     if os.getenv("ATB_SKIP_PLATFORM_CHECK", "0") != "1":
         print_formatted_text(HTML(INFO + "正在检查Windows属性..."), style=style)
         os_name, os_release, os_version, arch = checkwin()
@@ -1365,7 +1345,6 @@ def pre_main() -> bool:
 
 @onerror
 def cleanup(code: int = 0):
-    global style
     print_formatted_text(HTML(INFO + "正在结束ADB服务..."), style=style)
     if check_adb_server()[0]:
         subprocess.Popen(["adb.exe", "kill-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
@@ -1395,9 +1374,7 @@ def main() -> int:
                     run("call root.bat")
                     clear()
                 case "openshell":
-                    clear()
-                    subprocess.run(["cmd.exe", "/k"], shell=True)
-                    clear()
+                    auto_clear(lambda: subprocess.run(["cmd.exe", "/k"], shell=True), end=True)
                 case "about":
                     about()
                 case "mods":
