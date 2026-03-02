@@ -39,10 +39,6 @@ import pluginutils, pluginutils.load, pluginutils.manage
 try:
     from build_info import (
         BUILD_TYPE,
-        SOFT_VERSION,
-        BUILD_VERSION,
-        PRODUCT_COMMIT,
-        BUILD_DATE_UTC,
         ALLOW_XTC,
     )
 except Exception:
@@ -1048,19 +1044,6 @@ def pre_main() -> bool:
     if DEBUG:
         print_formatted_text(HTML(INFO + "已启用调试模式"), style=style)
         logger.debug("Debug mode is enabled")
-    if " " in os.path.abspath("."):
-        if os.getenv("ATB_IGNORE_SPACE_IN_PATH", "0") != "1":
-            print_formatted_text(HTML(ERROR + "当前路径包含空格，会导致未知问题，请将工具箱放置在无空格路径下运行，即将退出..."), style=style)
-            print_formatted_text(HTML(INFO + "若要跳过此检测，请设置环境变量ATB_IGNORE_SPACE_IN_PATH=1"), style=style)
-            time.sleep(2)
-            return False
-        else:
-            print_formatted_text(HTML(WARN + "当前路径包含空格，可能导致未知问题，建议将工具箱放置在无空格路径下运行"), style=style)
-    if getattr(sys, 'frozen', False):
-        this_path = os.path.dirname(sys.executable)
-    else:
-        this_path = os.path.dirname(os.path.abspath(__file__))
-
     env_path_lower = (os.environ.get("PATH") or "").lower()
     keywords = ["windows", "system32", "powershell"]
     if not all(k in env_path_lower for k in keywords):
