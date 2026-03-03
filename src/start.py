@@ -44,6 +44,16 @@ try:
     from build_info import BUILD_TYPE
 except Exception:
     BUILD_TYPE = "release"
+
+
+# 全局强制stdout/stderr编码为utf-8，适配VSCode/现代终端
+import io
+import sys
+if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+if sys.stderr.encoding is None or sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
+
 # 强制 ALLOW_XTC 永远为 True
 ALLOW_XTC = True
 
@@ -168,6 +178,10 @@ def auto_clear(fn=None, *, logo=False, end=False):
 
 def _build_run_env() -> Dict[str, str]:
     env = os.environ.copy()
+    # 确保 PATH 包含当前目录，防止 device_check.exe 找不到
+    path = env.get("PATH", "")
+    if "." not in path.split(";"):
+        env["PATH"] = f".;{path}" if path else "."
     current_ext = str(env.get("PATHEXT") or "")
     ext_items = [item.strip() for item in current_ext.split(";") if item.strip()]
     ext_upper = {item.upper() for item in ext_items}
@@ -181,7 +195,8 @@ def _build_run_env() -> Dict[str, str]:
 
 class PersistentCmdShell:
     def __init__(self, env: Dict[str, str]):
-        self._encoding = locale.getpreferredencoding(False) or "utf-8"
+        # 强制使用 utf-8 编码，统一命令行交互和输出
+        self._encoding = "utf-8"
         self._lock = threading.Lock()
         self._proc = subprocess.Popen(
             ["cmd.exe", "/d", "/q", "/v:on"],
@@ -235,18 +250,27 @@ class PersistentCmdShell:
             except Exception:
                 pass
 
-    def run_command(self, command: str, extra_env: Optional[Dict[str, str]] = None, capture_output: bool = False) -> subprocess.CompletedProcess:
+    def run_command(
+        self,
+        command: str,
+        extra_env: Optional[Dict[str, str]] = None,
+        capture_output: bool = False,
+    ) -> Tuple[subprocess.CompletedProcess, Dict[str, str]]:
         if not self.is_alive():
             raise RuntimeError("Persistent cmd process has exited")
 
         token = uuid.uuid4().hex.upper()
         begin_marker = f"__ATB_BEGIN_{token}__"
         end_marker = f"__ATB_END_{token}__"
+        env_begin_marker = f"__ATB_ENV_BEGIN_{token}__"
+        env_end_marker = f"__ATB_ENV_END_{token}__"
         rc_prefix = f"__ATB_RC_{token}="
 
         output_lines: List[str] = []
+        env_snapshot: Dict[str, str] = {}
         rc = 0
         in_payload = False
+        in_env = False
 
         with self._lock:
             self._write_line("@echo off")
@@ -260,6 +284,9 @@ class PersistentCmdShell:
             self._write_line(command)
             self._write_line(f"echo {rc_prefix}!ERRORLEVEL!")
             self._write_line(f"echo {end_marker}")
+            self._write_line(f"echo {env_begin_marker}")
+            self._write_line("set")
+            self._write_line(f"echo {env_end_marker}")
             self._flush_stdin()
 
             if not self._proc.stdout:
@@ -275,6 +302,12 @@ class PersistentCmdShell:
                     in_payload = True
                     continue
                 if clean == end_marker:
+                    in_payload = False
+                    continue
+                if clean == env_begin_marker:
+                    in_env = True
+                    continue
+                if clean == env_end_marker:
                     break
                 if clean.startswith(rc_prefix):
                     try:
@@ -283,13 +316,19 @@ class PersistentCmdShell:
                         rc = 1
                     continue
 
+                if in_env:
+                    if "=" in clean:
+                        key, value = clean.split("=", 1)
+                        env_snapshot[key] = value
+                    continue
+
                 if in_payload:
                     output_lines.append(clean)
                     if not capture_output:
                         print(clean)
 
         stdout_text = "\n".join(output_lines) if capture_output else None
-        return subprocess.CompletedProcess(args=command, returncode=rc, stdout=stdout_text, stderr=None)
+        return subprocess.CompletedProcess(args=command, returncode=rc, stdout=stdout_text, stderr=None), env_snapshot
 
 
 def _ensure_run_initialized() -> PersistentCmdShell:
@@ -327,9 +366,44 @@ def run(
     capture_output: bool = False,
     check: bool = False,
 ) -> subprocess.CompletedProcess:
-    shell = _ensure_run_initialized()
+    global _RUN_SHELL
+    global _RUN_ENV_CACHE
+
     merged_env = {str(k): str(v) for k, v in (extra_env or {}).items()}
-    result = shell.run_command(cmd, extra_env=merged_env if merged_env else None, capture_output=capture_output)
+    last_error: Optional[Exception] = None
+
+    for _attempt in range(2):
+        shell = _ensure_run_initialized()
+        try:
+            result, env_snapshot = shell.run_command(
+                cmd,
+                extra_env=merged_env if merged_env else None,
+                capture_output=capture_output,
+            )
+            if env_snapshot:
+                _RUN_ENV_CACHE = env_snapshot
+            break
+        except RuntimeError as e:
+            last_error = e
+            # Shell may be killed by an external script; recreate once and retry.
+            _RUN_SHELL = None
+            continue
+    else:
+        raise RuntimeError(f"run() failed after retry: {last_error}")
+
+    # 强制所有输出用 utf-8 解码，彻底规避终端影响
+    if capture_output and result.stdout is not None:
+        try:
+            # 若已是 str，encode 再 decode，防止终端编码影响
+            result = subprocess.CompletedProcess(
+                args=result.args,
+                returncode=result.returncode,
+                stdout=result.stdout.encode("utf-8", errors="replace").decode("utf-8", errors="replace"),
+                stderr=result.stderr,
+            )
+        except Exception:
+            pass
+
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
             returncode=result.returncode,
