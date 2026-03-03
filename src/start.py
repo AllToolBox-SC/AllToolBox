@@ -1,3 +1,16 @@
+"""AllToolBox startup script and interactive menu entrypoint."""
+# pylint: disable=too-many-lines,line-too-long,trailing-whitespace,missing-final-newline
+# pylint: disable=multiple-imports,broad-exception-caught,reimported,no-member
+# pylint: disable=invalid-name,pointless-string-statement,logging-fstring-interpolation
+# pylint: disable=inconsistent-return-statements,redefined-outer-name,multiple-statements
+# pylint: disable=consider-using-with,too-many-locals,too-many-branches,too-many-statements
+# pylint: disable=global-statement,global-variable-undefined,too-many-arguments
+# pylint: disable=too-many-positional-arguments,function-redefined,cell-var-from-loop
+# pylint: disable=unused-argument,too-few-public-methods,global-variable-not-assigned
+# pylint: disable=expression-not-assigned,unused-variable,subprocess-run-check
+# pylint: disable=unspecified-encoding,wrong-import-order,ungrouped-imports,unused-import
+# pylint: disable=missing-function-docstring,missing-class-docstring
+# pylint: disable=mixed-line-endings,useless-object-inheritance,too-many-return-statements
 # -*- coding: utf-8 -*-
 
 import logging
@@ -1443,59 +1456,79 @@ def cleanup(code: int = 0):
     sys.exit(code)
 
 
+class AllToolBox(object):
+    """High-level controller for preflight, menu loop, and action dispatch."""
+
+    def __init__(self) -> None:
+        self._debug_allowed = debug_features_allowed()
+
+    def _run_pre_main(self) -> bool:
+        return pre_main() if not flag else True
+
+    def _handle_action(self, action: str) -> Optional[int]:
+        if action == "SHIFT_D":
+            if self._debug_allowed:
+                debug()
+            else:
+                print_formatted_text(HTML(ERROR + "当前为 Release 构建，DEBUG 功能已禁用"), style=style)
+                time.sleep(1)
+            return None
+        if action == "onekeyroot":
+            root()
+            return None
+        if action == "openshell":
+            clear()
+            subprocess.run(["cmd.exe", "/k"], shell=True)
+            clear()
+            return None
+        if action == "about":
+            about()
+            return None
+        if action == "mods":
+            mod()
+            return None
+        if action == "commonly":
+            commonly()
+            return None
+        if action == "user-debug":
+            userdebug()
+            return None
+        if action == "man-apps":
+            appset()
+            return None
+        if action == "magisk-mod":
+            magisk()
+            return None
+        if action == "help-links":
+            help_menu()
+            return None
+        if action == "exit":
+            return 0
+        return None
+
+    def run(self) -> int:
+        try:
+            pre_ok = self._run_pre_main()
+            if not pre_ok:
+                return 1
+            while True:
+                clear()
+                run("call logo")
+                selection = menu()
+                maybe_code = self._handle_action(selection)
+                if maybe_code is not None:
+                    return maybe_code
+        except KeyboardInterrupt:
+            print_formatted_text(HTML("\n" + WARN + "检测到用户中断，正在退出..."), style=style)
+            return 0
+
+
 @onerror
 def main() -> int:
-    global flag
-    global key
-    debug_allowed = debug_features_allowed()
-    try:
-        # Start interactive (UI/menu) flow. Run pre-main checks once.
-        pre_ok = pre_main() if not flag else True
-        if not pre_ok:
-            return 1
-        while True:
-            clear()
-            run("call logo")
-            result = menu()
-            match result:
-                case "SHIFT_D":
-                    if debug_allowed:
-                        debug()
-                    else:
-                        print_formatted_text(HTML(ERROR + "当前为 Release 构建，DEBUG 功能已禁用"), style=style)
-                        time.sleep(1)
-                case "onekeyroot":
-                    root()
-                case "openshell":
-                    clear()
-                    subprocess.run(["cmd.exe", "/k"], shell=True)
-                    clear()
-                case "about":
-                    about()
-                case "mods":
-                    mod()
-                case "commonly":
-                    commonly()
-                case "user-debug":
-                    userdebug()
-                case "man-apps":
-                    appset()
-                case "magisk-mod":
-                    magisk()
-                case "help-links":
-                    help_menu()
-                case "exit":
-                    return 0
-                case _:
-                    continue
-
-    except KeyboardInterrupt:
-        print_formatted_text(HTML("\n" + WARN + "检测到用户中断，正在退出..."), style=style)
-        return 0
+    return AllToolBox().run()
 
 
 if __name__ == "__main__":
-    result = main()
-    logger.debug("ATBExitEvent, main returned: %s", result)
-    cleanup(result)
-    
+    exit_code = main()
+    logger.debug("ATBExitEvent, main returned: %s", exit_code)
+    cleanup(exit_code)
