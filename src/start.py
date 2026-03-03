@@ -195,8 +195,8 @@ def _build_run_env() -> Dict[str, str]:
 
 class PersistentCmdShell:
     def __init__(self, env: Dict[str, str]):
-        # 强制使用 utf-8 编码，统一命令行交互和输出
-        self._encoding = "utf-8"
+        # 强制使用 ansi (mbcs) 编码，适配 Windows cmd 默认编码
+        self._encoding = "mbcs"
         self._lock = threading.Lock()
         self._proc = subprocess.Popen(
             ["cmd.exe", "/d", "/q", "/v:on"],
@@ -391,14 +391,14 @@ def run(
     else:
         raise RuntimeError(f"run() failed after retry: {last_error}")
 
-    # 强制所有输出用 utf-8 解码，彻底规避终端影响
+    # 强制所有输出用 ansi (mbcs) 解码，彻底规避终端影响
     if capture_output and result.stdout is not None:
         try:
             # 若已是 str，encode 再 decode，防止终端编码影响
             result = subprocess.CompletedProcess(
                 args=result.args,
                 returncode=result.returncode,
-                stdout=result.stdout.encode("utf-8", errors="replace").decode("utf-8", errors="replace"),
+                stdout=result.stdout.encode("mbcs", errors="replace").decode("mbcs", errors="replace"),
                 stderr=result.stderr,
             )
         except Exception:
