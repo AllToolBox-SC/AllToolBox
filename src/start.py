@@ -1,17 +1,6 @@
-"""AllToolBox startup script and interactive menu entrypoint."""
-# pylint: disable=too-many-lines,line-too-long,trailing-whitespace,missing-final-newline
-# pylint: disable=multiple-imports,broad-exception-caught,reimported,no-member
-# pylint: disable=invalid-name,pointless-string-statement,logging-fstring-interpolation
-# pylint: disable=inconsistent-return-statements,redefined-outer-name,multiple-statements
-# pylint: disable=consider-using-with,too-many-locals,too-many-branches,too-many-statements
-# pylint: disable=global-statement,global-variable-undefined,too-many-arguments
-# pylint: disable=too-many-positional-arguments,function-redefined,cell-var-from-loop
-# pylint: disable=unused-argument,too-few-public-methods,global-variable-not-assigned
-# pylint: disable=expression-not-assigned,unused-variable,subprocess-run-check
-# pylint: disable=unspecified-encoding,wrong-import-order,ungrouped-imports,unused-import
-# pylint: disable=missing-function-docstring,missing-class-docstring
-# pylint: disable=mixed-line-endings,useless-object-inheritance,too-many-return-statements
 # -*- coding: utf-8 -*-
+
+"""AllToolBox startup script and interactive menu entrypoint."""
 
 import logging
 import os
