@@ -73,6 +73,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache") -Filter "DOWNLO~*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -Recurse -Force $_.FullName
+          }
           $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-msvcrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-llvm-19.1.1-mingw-w64msvcrt-12.0.0-r2.zip"
           $archive = Join-Path $env:RUNNER_TEMP "winlibs-mingw.zip"
           $extractRoot = Join-Path $env:RUNNER_TEMP "winlibs-mingw"
@@ -90,7 +93,7 @@ jobs:
             throw "Cannot locate expected path: $mingw64\\bin\\gcc.exe"
           }
 
-          $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
+          $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\downloads\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
           $nuitkaMingw = Join-Path $nuitkaGccRoot "mingw64"
           New-Item -ItemType Directory -Path $nuitkaGccRoot -Force | Out-Null
           if (Test-Path $nuitkaMingw) {
@@ -137,7 +140,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           # Pre-seed Nuitka Dependency Walker cache to avoid interactive download prompt.
-          $dependsCache = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\depends\\x86_64"
+          $dependsCache = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\downloads\\depends\\x86_64"
           New-Item -ItemType Directory -Path $dependsCache -Force | Out-Null
           $dependsExe = Join-Path $dependsCache "depends.exe"
           if (-not (Test-Path $dependsExe)) {
@@ -304,6 +307,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          Get-ChildItem -Path (Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache") -Filter "DOWNLO~*" -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -Recurse -Force $_.FullName
+          }
           $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-msvcrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-llvm-19.1.1-mingw-w64msvcrt-12.0.0-r2.zip"
           $archive = Join-Path $env:RUNNER_TEMP "winlibs-mingw.zip"
           $extractRoot = Join-Path $env:RUNNER_TEMP "winlibs-mingw"
@@ -321,7 +327,7 @@ jobs:
             throw "Cannot locate expected path: $mingw64\\bin\\gcc.exe"
           }
 
-          $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
+          $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\downloads\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
           $nuitkaMingw = Join-Path $nuitkaGccRoot "mingw64"
           New-Item -ItemType Directory -Path $nuitkaGccRoot -Force | Out-Null
           if (Test-Path $nuitkaMingw) {
@@ -368,7 +374,7 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           # Pre-seed Nuitka Dependency Walker cache to avoid interactive download prompt.
-          $dependsCache = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\depends\\x86_64"
+          $dependsCache = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\downloads\\depends\\x86_64"
           New-Item -ItemType Directory -Path $dependsCache -Force | Out-Null
           $dependsExe = Join-Path $dependsCache "depends.exe"
           if (-not (Test-Path $dependsExe)) {
