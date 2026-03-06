@@ -12,3 +12,4 @@ nuitka==2.8.9
 # Verification require this
 filehash==0.2.dev1
 # cryptography==46.0.4 ; TODO: Verify Signature Required
+miniaudio==1.61

@@ -29,6 +29,7 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.mouse_events import MouseEventType, MouseButton
 from functools import wraps
 from flash_ak3 import AnyKernel3
+from musicplayer import AudioPlayer
 import colorama
 import subprocess
 import socket
@@ -943,7 +944,10 @@ def root():
             case "A":
                 return
             case "1":
+                ato = AudioPlayer(os.path.join(".", "music"))
+                ato.play_audio(auto_next=True)
                 run("call root.bat"); clear()
+                ato.stop_audio()
             case "2":
                 run("call otherroot.bat 3"); clear()
 
