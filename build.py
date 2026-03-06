@@ -1051,8 +1051,13 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
             ("start.py", "main.exe")
         ]
 
-        # Determine the number of threads to use for Nuitka compilation (max 2 to prevent OOM)
-        nuitka_max_threads = min(max_threads, 2)
+        # Determine the number of threads to use for Nuitka compilation.
+        # For MinGW, force single-worker to avoid concurrent access to Nuitka's
+        # shared WinLibs download/cache artifacts on CI (WinError 32 file lock).
+        if bmode == "mingw":
+            nuitka_max_threads = 1
+        else:
+            nuitka_max_threads = min(max_threads, 2)
 
         # Prepare commands based on profile
         commands = []

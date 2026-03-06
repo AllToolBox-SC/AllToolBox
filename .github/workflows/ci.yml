@@ -71,7 +71,6 @@ jobs:
 
       - name: Setup pinned WinLibs MinGW for CI and Nuitka cache
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = "Stop"
           $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-msvcrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-llvm-19.1.1-mingw-w64msvcrt-12.0.0-r2.zip"
@@ -84,13 +83,12 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile $archive
           Expand-Archive -Path $archive -DestinationPath $extractRoot -Force
 
-          $mingwContainer = Get-ChildItem -Path $extractRoot -Directory | Where-Object {
-            Test-Path (Join-Path $_.FullName "mingw64\\bin\\gcc.exe")
-          } | Select-Object -First 1
-          if (-not $mingwContainer) {
-            throw "Cannot locate mingw64/bin/gcc.exe in extracted WinLibs package."
+          $mingw64 = Join-Path $extractRoot "mingw64"
+          if (-not (Test-Path (Join-Path $mingw64 "bin\\gcc.exe"))) {
+            Write-Host "Extract root listing:"
+            Get-ChildItem -Path $extractRoot -Force | ForEach-Object { Write-Host " - $($_.FullName)" }
+            throw "Cannot locate expected path: $mingw64\\bin\\gcc.exe"
           }
-          $mingw64 = Join-Path $mingwContainer.FullName "mingw64"
 
           $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
           $nuitkaMingw = Join-Path $nuitkaGccRoot "mingw64"
@@ -135,7 +133,6 @@ jobs:
 
       - name: Preinstall Nuitka Dependency Walker and compiler caches
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -162,7 +159,7 @@ jobs:
                 Write-Host "Downloaded Dependency Walker from: $u"
                 break
               } catch {
-                Write-Host "Dependency Walker download failed from $u: $($_.Exception.Message)"
+                Write-Host "Dependency Walker download failed from ${u}: $($_.Exception.Message)"
               }
             }
             if ($downloaded) {
@@ -305,7 +302,6 @@ jobs:
 
       - name: Setup pinned WinLibs MinGW for CI and Nuitka cache
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = "Stop"
           $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-msvcrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-llvm-19.1.1-mingw-w64msvcrt-12.0.0-r2.zip"
@@ -318,13 +314,12 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile $archive
           Expand-Archive -Path $archive -DestinationPath $extractRoot -Force
 
-          $mingwContainer = Get-ChildItem -Path $extractRoot -Directory | Where-Object {
-            Test-Path (Join-Path $_.FullName "mingw64\\bin\\gcc.exe")
-          } | Select-Object -First 1
-          if (-not $mingwContainer) {
-            throw "Cannot locate mingw64/bin/gcc.exe in extracted WinLibs package."
+          $mingw64 = Join-Path $extractRoot "mingw64"
+          if (-not (Test-Path (Join-Path $mingw64 "bin\\gcc.exe"))) {
+            Write-Host "Extract root listing:"
+            Get-ChildItem -Path $extractRoot -Force | ForEach-Object { Write-Host " - $($_.FullName)" }
+            throw "Cannot locate expected path: $mingw64\\bin\\gcc.exe"
           }
-          $mingw64 = Join-Path $mingwContainer.FullName "mingw64"
 
           $nuitkaGccRoot = Join-Path $env:LOCALAPPDATA "Nuitka\\Nuitka\\Cache\\DOWNLO~1\\gcc\\x86_64\\14.2.0posix-19.1.1-12.0.0-msvcrt-r2"
           $nuitkaMingw = Join-Path $nuitkaGccRoot "mingw64"
@@ -369,7 +364,6 @@ jobs:
 
       - name: Preinstall Nuitka Dependency Walker and compiler caches
         shell: pwsh
-        continue-on-error: true
         run: |
           $ErrorActionPreference = "Stop"
 
@@ -396,7 +390,7 @@ jobs:
                 Write-Host "Downloaded Dependency Walker from: $u"
                 break
               } catch {
-                Write-Host "Dependency Walker download failed from $u: $($_.Exception.Message)"
+                Write-Host "Dependency Walker download failed from ${u}: $($_.Exception.Message)"
               }
             }
             if ($downloaded) {
