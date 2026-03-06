@@ -284,6 +284,7 @@ class PersistentCmdShell:
 
             self._write_line(f"echo {begin_marker}")
             self._write_line(command)
+            self._write_line("echo(")
             self._write_line(f"echo {rc_prefix}!ERRORLEVEL!")
             self._write_line(f"echo {end_marker}")
             self._write_line(f"echo {env_begin_marker}")
@@ -294,8 +295,34 @@ class PersistentCmdShell:
             if not self._proc.stdout:
                 raise RuntimeError("Persistent cmd stdout is unavailable")
 
+            # Timeout (seconds) used to detect a stuck "pause" prompt with no trailing newline.
+            READLINE_TIMEOUT = 20.0
+
             while True:
-                line = self._proc.stdout.readline()
+                timer = None
+                # Only enable the timeout-based auto-enter once we've entered the payload section.
+                if in_payload:
+                    def _send_enter():
+                        try:
+                            if self._proc.stdin:
+                                self._proc.stdin.write("\n")
+                                self._proc.stdin.flush()
+                        except Exception:
+                            pass
+
+                    timer = threading.Timer(READLINE_TIMEOUT, _send_enter)
+                    timer.daemon = True
+                    timer.start()
+
+                try:
+                    line = self._proc.stdout.readline()
+                finally:
+                    if timer:
+                        try:
+                            timer.cancel()
+                        except Exception:
+                            pass
+
                 if line == "":
                     raise RuntimeError("Persistent cmd stdout closed unexpectedly")
 
@@ -325,9 +352,36 @@ class PersistentCmdShell:
                     continue
 
                 if in_payload:
+                    # Detect pause prompts from batch scripts (e.g. "按任意键..." / "Press any key...")
+                    is_pause_prompt = False
+                    try:
+                        if ("按任意键" in clean) or ("Press any key" in clean) or ("press any key" in clean.lower()):
+                            is_pause_prompt = True
+                    except Exception:
+                        is_pause_prompt = False
+
                     output_lines.append(clean)
                     if not capture_output:
-                        print(clean)
+                        try:
+                            print_formatted_text(ANSI(clean))
+                        except Exception:
+                            print(clean)
+
+                    if is_pause_prompt:
+                        # Let the user acknowledge, then send an Enter to the shell so the batch can continue.
+                        try:
+                            pause()
+                        except Exception:
+                            try:
+                                input()
+                            except Exception:
+                                pass
+                        try:
+                            if self._proc.stdin:
+                                self._proc.stdin.write("\n")
+                                self._proc.stdin.flush()
+                        except Exception:
+                            pass
 
         stdout_text = "\n".join(output_lines) if capture_output else None
         return subprocess.CompletedProcess(args=command, returncode=rc, stdout=stdout_text, stderr=None), env_snapshot
@@ -373,6 +427,40 @@ def run(
 
     merged_env = {str(k): str(v) for k, v in (extra_env or {}).items()}
     last_error: Optional[Exception] = None
+
+    # 快速检测：若是简单的 "call <script>" 且脚本文件包含交互性 PAUSE/按任意键 提示，
+    # 则改为在新进程中直接运行并继承父终端（stdin/stdout），以便用户能按键继续。
+    if not capture_output:
+        try:
+            s = cmd.strip()
+            if s.lower().startswith("call "):
+                target = s[5:].strip()
+                if target.startswith('"') and target.endswith('"'):
+                    target = target[1:-1]
+                token = target.split()[0]
+                candidates = [token, token + ".bat", os.path.join(os.getcwd(), token), os.path.join(os.getcwd(), token + ".bat")]
+                found = None
+                for cand in candidates:
+                    if os.path.exists(cand) and os.path.isfile(cand):
+                        try:
+                            with open(cand, 'r', encoding='utf-8', errors='ignore') as f:
+                                text = f.read().lower()
+                                if 'pause' in text or '按任意键' in text or 'press any key' in text:
+                                    found = cand
+                                    break
+                        except Exception:
+                            continue
+                if found:
+                    env_for_run = (_RUN_ENV_CACHE.copy() if _RUN_ENV_CACHE else os.environ.copy())
+                    env_for_run.update(merged_env)
+                    try:
+                        ret = subprocess.run(["cmd.exe", "/c", cmd], env=env_for_run, shell=False)
+                        return subprocess.CompletedProcess(args=cmd, returncode=ret.returncode, stdout=None, stderr=None)
+                    except Exception:
+                        # 如果以交互方式运行失败，则继续使用持久 shell
+                        pass
+        except Exception:
+            pass
 
     for _attempt in range(2):
         shell = _ensure_run_initialized()
