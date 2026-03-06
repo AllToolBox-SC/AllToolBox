@@ -315,7 +315,15 @@ def find_upx_dir():
     return None
 
 @onerror
-def pyinstaller_cmd(python_exe: str, script: str, dist: str, debug: bool, upx_dir: str | None):
+def pyinstaller_cmd(
+    python_exe: str,
+    script: str,
+    dist: str,
+    debug: bool,
+    upx_dir: str | None,
+    workpath: str | None = None,
+    specpath: str | None = None,
+):
     # Use python -m PyInstaller to honor selected interpreter.
     cmd = [
         python_exe,
@@ -327,6 +335,10 @@ def pyinstaller_cmd(python_exe: str, script: str, dist: str, debug: bool, upx_di
         "--distpath",
         dist,
     ]
+    if workpath:
+        cmd.extend(["--workpath", workpath])
+    if specpath:
+        cmd.extend(["--specpath", specpath])
     if upx_dir and debug:
         cmd.append(f"--upx-dir={upx_dir}")
     if debug:
@@ -538,14 +550,15 @@ def run_step(cmd, bar, **kwargs):
         raise RuntimeError(error_msg)
 
 
-def run_python_compilation_task(cmd, src_script, exe_name, bar):
+def run_python_compilation_task(cmd, src_script, exe_name, bar, env=None):
     """运行编译任务，输出走日志不直接写控制台。"""
     p = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=False,
-        bufsize=1
+        bufsize=1,
+        env=env
     )
     captured_lines: list[str] = []
     for line_bytes in p.stdout:
@@ -980,6 +993,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
     try:
         if os.path.isfile(launcher_exe_path):
             shutil.copy2(launcher_exe_path, launcher_alias_path)
+            os.remove(launcher_exe_path)
     except Exception as e:
         custom_write(f"Warning: Failed to create launcher alias {launcher_alias_path}: {e}")
 
@@ -1127,24 +1141,50 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
         # Prepare commands based on profile
         commands = []
         for src_script, exe_name in python_scripts:
+            script_stem = os.path.splitext(src_script)[0]
+            script_workpath = os.path.join("./build/py/work", script_stem)
+            script_specpath = os.path.join("./build/py/spec", script_stem)
+            os.makedirs(script_workpath, exist_ok=True)
+            os.makedirs(script_specpath, exist_ok=True)
             if profile == 0:  # Release build
-                cmd = pyinstaller_cmd(python_exe, f"src/{src_script}", "./build/py/dist", debug=False, upx_dir=upx_dir)
+                cmd = pyinstaller_cmd(
+                    python_exe,
+                    f"src/{src_script}",
+                    "./build/py/dist",
+                    debug=False,
+                    upx_dir=upx_dir,
+                    workpath=script_workpath,
+                    specpath=script_specpath,
+                )
             else:  # Debug build
-                cmd = pyinstaller_cmd(python_exe, f"src/{src_script}", "./build/py/dist", debug=True, upx_dir=upx_dir)
-            commands.append((cmd, src_script, exe_name))
+                cmd = pyinstaller_cmd(
+                    python_exe,
+                    f"src/{src_script}",
+                    "./build/py/dist",
+                    debug=True,
+                    upx_dir=upx_dir,
+                    workpath=script_workpath,
+                    specpath=script_specpath,
+                )
+            commands.append((cmd, src_script, exe_name, script_stem))
 
         # Execute Python compilation tasks in parallel with full thread count for PyInstaller
-        def pyinstaller_task(cmd, src_script, exe_name):
+        def pyinstaller_task(cmd, src_script, exe_name, script_stem):
             gradle_bar.start_task(f":pyinstaller:{src_script.replace('.py', '')}")
             try:
-                run_python_compilation_task(cmd, src_script, exe_name, None)
+                # Isolate PyInstaller cache/config per task to avoid parallel DLL lock conflicts.
+                pyi_env = os.environ.copy()
+                pyi_cache_root = os.path.join("./build/py/pyinstaller-cache", script_stem)
+                os.makedirs(pyi_cache_root, exist_ok=True)
+                pyi_env["PYINSTALLER_CONFIG_DIR"] = os.path.abspath(pyi_cache_root)
+                run_python_compilation_task(cmd, src_script, exe_name, None, env=pyi_env)
             finally:
                 gradle_bar.complete_task(f":pyinstaller:{src_script.replace('.py', '')}")
 
         with ThreadPoolExecutor(max_workers=max_threads) as py_executor:
             py_futures = []
-            for cmd, src_script, exe_name in commands:
-                future = py_executor.submit(pyinstaller_task, cmd, src_script, exe_name)
+            for cmd, src_script, exe_name, script_stem in commands:
+                future = py_executor.submit(pyinstaller_task, cmd, src_script, exe_name, script_stem)
                 py_futures.append(future)
 
             # Wait for all PyInstaller tasks to complete
@@ -1323,8 +1363,7 @@ def main(python_builder: int, profile: int, bmode: str, platform: str, builder: 
 
     custom_write("Build metadata locked in src/build_info.py (no runtime conf).")
 
-    # Force progress bar to 100%
-    gradle_bar.total_tasks = len(gradle_bar.task_names)  # Update total tasks to actual count
+    gradle_bar.total_tasks = len(gradle_bar.task_names) 
     for task in gradle_bar.task_names:
         if task not in gradle_bar.completed_set:
             gradle_bar.completed_set.add(task)

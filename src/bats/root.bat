@@ -2,6 +2,7 @@
 :: :roottmp
 :: CLS
 :: if exist .\roottmp.txt goto rootspcd
+call .\color.bat
 del /Q /F .\nouserdata.txt >nul 2>nul
 if "%1"=="" goto ROOT
 set /p="1" <nul > nouserdata.txt

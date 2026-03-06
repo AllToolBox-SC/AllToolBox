@@ -42,3 +42,4 @@ versiontmp.txt
 bugversion.txt
 .gitignore
 tmp*/
+pip*/

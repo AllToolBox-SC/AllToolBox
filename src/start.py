@@ -44,30 +44,10 @@ import pluginutils, pluginutils.load, pluginutils.manage
 
 try:
     from build_info import BUILD_TYPE
-except Exception:
+except (ImportError, ModuleNotFoundError):
     BUILD_TYPE = "release"
 
-
-# 全局强制stdout/stderr编码为utf-8，适配VSCode/现代终端
-import io
-import sys
-if sys.stdout.encoding is None or sys.stdout.encoding.lower() != "utf-8":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace", line_buffering=True)
-if sys.stderr.encoding is None or sys.stderr.encoding.lower() != "utf-8":
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
-
-# 强制 ALLOW_XTC 永远为 True
 ALLOW_XTC = True
-
-
-class MultilineFormatter(logging.Formatter):
-    def format(self, record):
-        original = super().format(record)
-        lines = original.splitlines()
-        if len(lines) <= 1:
-            return original
-        prefix = lines[0][:len(lines[0]) - len(record.getMessage())]
-        return '\n'.join([lines[0]] + [prefix + line for line in lines[1:]])
 
 
 style = Style.from_dict({
@@ -113,16 +93,15 @@ LINE = "-" * 68
 DEBUG = BUILD_MODE == "debug"
 allow_xtc = True
 
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-logger.handlers.clear()
-os.makedirs("logs", exist_ok=True)
-filename = f"logs/atb_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-file_handler = logging.FileHandler(filename, encoding="utf-8")
-file_handler.setLevel(logging.DEBUG)
-formatter = MultilineFormatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
+
+class MultilineFormatter(logging.Formatter):
+    def format(self, record):
+        original = super().format(record)
+        lines = original.splitlines()
+        if len(lines) <= 1:
+            return original
+        prefix = lines[0][:len(lines[0]) - len(record.getMessage())]
+        return '\n'.join([lines[0]] + [prefix + line for line in lines[1:]])
 
 
 class BreakOut(Exception):
@@ -180,7 +159,6 @@ def auto_clear(fn=None, *, logo=False, end=False):
 
 def _build_run_env() -> Dict[str, str]:
     env = os.environ.copy()
-    # 确保 PATH 包含当前目录，防止 device_check.exe 找不到
     path = env.get("PATH", "")
     if "." not in path.split(";"):
         env["PATH"] = f".;{path}" if path else "."
@@ -197,7 +175,6 @@ def _build_run_env() -> Dict[str, str]:
 
 class PersistentCmdShell:
     def __init__(self, env: Dict[str, str]):
-        # 强制使用 ansi (mbcs) 编码，适配 Windows cmd 默认编码
         self._encoding = "mbcs"
         self._lock = threading.Lock()
         self._proc = subprocess.Popen(
@@ -367,7 +344,10 @@ def run(
     extra_env: Optional[Dict[str, str]] = None,
     capture_output: bool = False,
     check: bool = False,
-) -> subprocess.CompletedProcess:
+):
+    """
+    TODO: Persistent Shell
+
     global _RUN_SHELL
     global _RUN_ENV_CACHE
 
@@ -414,6 +394,15 @@ def run(
             stderr=result.stderr,
         )
     return result
+    """
+
+    # 这里已经舍去了很多初始化的东西，所以不需要再说每次都要初始化了 By 星旬
+    subprocess.run(["cmd.exe", "/v:on", "/c", f'''
+                    @echo off &
+                    setlocal enabledelayedexpansion 1>nul 2>nul &
+                    @{cmd} &
+                    endlocal 1>nul 2>nul &
+                    '''.replace("\n", "").replace(20*" ", "")])
 
 
 def checkwin() -> Tuple[str, str, str, Tuple[str, str]]:
@@ -861,9 +850,9 @@ def root():
             case "A":
                 return
             case "1":
-                run("call root.bat")
+                run("call root.bat"); clear()
             case "2":
-                run("call otherroot.bat 3")
+                run("call otherroot.bat 3"); clear()
 
 
 @onerror
@@ -1279,9 +1268,13 @@ def pre_main() -> bool:
     global logger
     global DEBUG
     global CURRENT_BUILD_META
-    run("@echo off & setlocal enabledelayedexpansion")
     colorama.init(autoreset=True)
     run("call .\\color.bat")
+    _PATHEXT: str = os.environ["PATHEXT"]
+    if not _PATHEXT.endswith(';'): _PATHEXT += ';'
+    _PATHEXT += ';'.join(_PATHEXT_EXTRA)
+    os.environ["PATHEXT"] = _PATHEXT
+    print(_PATHEXT)
     if DEBUG:
         print_formatted_text(HTML(INFO + "已启用调试模式"), style=style)
         logger.debug("Debug mode is enabled")
@@ -1518,6 +1511,17 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+    os.makedirs("logs", exist_ok=True)
+    filename = f"logs/atb_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    file_handler = logging.FileHandler(filename, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    formatter = MultilineFormatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
     exit_code = main()
     logger.debug("ATBExitEvent, main returned: %s", exit_code)
     cleanup(exit_code)
