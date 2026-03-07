@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Menu utilities extracted from start.py for reuse by Python and batch callers.
-Provides interactive menu rendering plus config-driven action resolution via XML.
+Provides interactive menu rendering plus config-driven action resolution via JSON.
 """
 from __future__ import annotations
 import asyncio
 import time
+import threading
 import os
 import json
-import xml.etree.ElementTree as ET
 import sys
 from typing import Iterable, List, Tuple
 
@@ -233,54 +233,88 @@ def choose(message: str, options: Iterable[Option], default: str | None = None, 
     return menu_choice(message=message, options=options, default=default, style_override=style_override or DEFAULT_STYLE, extra_bindings=extra_bindings)
 
 
-def load_action_from_xml(path: str) -> str | None:
-    """Read action name from an XML file: expects <config><action>value</action></config> or any <action> tag.
-    Returns the text content lowercased; ignores errors.
+def load_action_from_json(path: str) -> str | None:
+    """Read action name from a JSON file.
+
+    Compatible expectations:
+    - File may be a dict with key "action": {"action": "value"}
+    - Or nested: {"config": {"action": "value"}}
+
+    Returns the action string (stripped) or None on error.
     """
     try:
         if not path or not os.path.isfile(path):
             return None
-        tree = ET.parse(path)
-        root = tree.getroot()
-        action_node = root.find("action")     
-        if action_node is not None and action_node.text:
-            return action_node.text.strip()
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+
+        if isinstance(data, dict):
+            action_value = data.get("action")
+            if not action_value and isinstance(data.get("config"), dict):
+                action_value = data["config"].get("action")
+            if action_value:
+                return str(action_value).strip()
     except Exception:
         return None
     return None
 
 
-def resolve_action_with_xml(path: str | None) -> str | None:
+def resolve_action_with_json(path: str | None) -> str | None:
     if path:
-        action = load_action_from_xml(path)
+        action = load_action_from_json(path)
         if action:
             return action
-    # Default fallback path
-    default_path = os.path.join(os.getcwd(), "menu_action.xml")
-    return load_action_from_xml(default_path)
+    # Default fallback path (JSON)
+    default_path = os.path.join(os.getcwd(), "menu_action.json")
+    return load_action_from_json(default_path)
 
 
-def load_options_from_xml(path: str) -> List[Tuple[str, str]]:
-    """Read menu options from XML: <options><option value="root" label="一键Root" /></options>."""
-    items: List[Tuple[str, str]] = []
+def load_options_from_json(path: str) -> List[Tuple[str, str]]:
+    """Read menu options from JSON.
+
+    Supported formats:
+    - A list of option objects: [{"value": "root", "label": "一键Root"}, ...]
+    - An object with an "options" list: {"options": [...]}
+
+    Returns a list of (value, label) tuples.
+    """
+    options_list: List[Tuple[str, str]] = []
     try:
         if not path or not os.path.isfile(path):
-            return items
-        tree = ET.parse(path)
-        root = tree.getroot()
-        for opt in root.findall("option"):
-            val = opt.attrib.get("value")
-            label = opt.attrib.get("label") or (opt.text.strip() if opt.text else None)
-            if val and label:
-                items.append((val, label))
+            return options_list
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+
+        entries = []
+        if isinstance(data, dict) and isinstance(data.get("options"), list):
+            entries = data.get("options")
+        elif isinstance(data, list):
+            entries = data
+        else:
+            return options_list
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            value = entry.get("value")
+            label = entry.get("label")
+            # fallback name/text fields
+            if not label:
+                if entry.get("text"):
+                    label = str(entry.get("text")).strip()
+                elif entry.get("name"):
+                    label = str(entry.get("name")).strip()
+
+            if value is not None and label:
+                options_list.append((str(value), str(label)))
     except Exception:
         return []
-    return items
+    return options_list
 
 
 def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "请选择操作") -> str:
     if not options:
-        raise ValueError("菜单选项为空，请提供XML或手动传入options")
+        raise ValueError("菜单选项为空，请提供JSON或手动传入options")
     if not DEFAULT_STYLE:
         # Fallback style for standalone/batch usage
         fallback_style = Style.from_dict({
@@ -293,21 +327,101 @@ def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "
     return choose(message, options, default=options[0][0])
 
 
+def pause(message: str = "按任意键继续...", style_override: Style | None = None, timeout: float | None = None) -> None:
+    """显示一个短暂的提示，等待任意键或鼠标/触摸点击继续。
+
+    - 支持键盘任意按键确认。
+    - 支持鼠标/触摸点击（左键单击或触控）确认。
+    - 可选 `timeout`（秒）在超时后自动继续。
+    """
+    # 确保有样式可用
+    chosen_style = style_override or DEFAULT_STYLE
+    if chosen_style is None:
+        fallback_style = Style.from_dict({
+            "pause": "fg:#cbd6e2",
+        })
+        set_default_style(fallback_style)
+        chosen_style = DEFAULT_STYLE
+
+    pause_style = Style.from_dict({"pause": "fg:#9dcffb bold"})
+    app_style = merge_styles([chosen_style, pause_style]) if chosen_style else pause_style
+
+    kb = KeyBindings()
+
+    @kb.add("enter", eager=True)
+    @kb.add(" ", eager=True)
+    def _enter(event):
+        event.app.exit()
+
+    @kb.add('<any>')
+    def _any(event):
+        event.app.exit()
+
+    def _mouse_handler(mouse_event):
+        # 仅在抬起事件时响应，兼容触控行为
+        if mouse_event.event_type == MouseEventType.MOUSE_UP:
+            try:
+                get_app().exit()
+            except Exception:
+                pass
+        return None
+
+    class PauseControl(FormattedTextControl):
+        def __init__(self, render_fn, handler):
+            super().__init__(render_fn, focusable=True, show_cursor=False)
+            self._handler = handler
+
+        def mouse_handler(self, mouse_event):
+            return self._handler(mouse_event)
+
+    control = PauseControl(lambda: [("class:pause", message)], _mouse_handler)
+    window = Window(content=control, always_hide_cursor=True, dont_extend_width=False, dont_extend_height=False)
+
+    app = Application(
+        layout=Layout(window, focused_element=control),
+        key_bindings=kb,
+        mouse_support=True,
+        full_screen=False,
+        style=app_style,
+    )
+
+    if timeout is not None and timeout > 0:
+        def _timer():
+            time.sleep(timeout)
+            try:
+                app.exit()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_timer, daemon=True)
+        t.start()
+
+    # 运行并阻塞，直到用户按键或点击，或超时
+    try:
+        app.run()
+    except Exception:
+        # 任何错误时回退到简单的输入提示
+        try:
+            input(message)
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
     
     if len(sys.argv) != 2:
-        print("[错误]请提供XML配置文件的路径作为命令行参数")
+        print("[错误]请提供JSON配置文件的路径作为命令行参数")
         sys.exit(1)
     
-    xml_path = sys.argv[1]
+    config_path = sys.argv[1]
     
-    if not os.path.isfile(xml_path):
-        print(f"[错误]找不到文件 '{xml_path}'")
+    if not os.path.isfile(config_path):
+        print(f"[错误]找不到文件 '{config_path}'")
         sys.exit(1)
     
-    loaded = load_options_from_xml(xml_path)
+    loaded = load_options_from_json(config_path)
     if not loaded:
-        print("[错误]XML文件中没有找到有效的菜单项")
+        print("[错误]JSON文件中没有找到有效的菜单项")
         sys.exit(1)
     
     try:

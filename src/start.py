@@ -341,8 +341,10 @@ class PersistentCmdShell:
                     output_lines.append(clean)
                     if not capture_output:
                         try:
+                            # Ensure all output is adapted for ANSI color codes
                             print_formatted_text(ANSI(clean))
-                        except Exception:
+                        except Exception as e:
+                            logging.error(f"Failed to render ANSI color: {e}")
                             print(clean)
 
                     if is_pause_prompt:
