@@ -24,6 +24,138 @@ from prompt_toolkit.styles import Style, merge_styles
 
 DEFAULT_STYLE: Style | None = None
 
+# Try to enable Windows ANSI support if available. This is optional so we
+# don't hard-fail when `colorama` isn't installed.
+try:
+    import colorama
+
+    try:
+        colorama.init()
+    except Exception:
+        pass
+except Exception:
+    colorama = None
+
+
+def _enable_windows_vt() -> bool:
+    """Enable Windows virtual terminal processing (ANSI) as a fallback when
+    colorama is not available or didn't succeed. Returns True on success.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        STD_OUTPUT_HANDLE = -11
+        hOut = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        if not hOut:
+            return False
+        mode = ctypes.c_uint()
+        if kernel32.GetConsoleMode(hOut, ctypes.byref(mode)) == 0:
+            return False
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+        new_mode = mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        if kernel32.SetConsoleMode(hOut, new_mode) == 0:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+# Try to enable VT processing regardless of colorama presence (best-effort).
+try:
+    _enable_windows_vt()
+except Exception:
+    pass
+
+
+def _style_spec_to_ansi(spec: str | None) -> tuple[str, str]:
+    """Convert a simple style spec into ANSI prefix/suffix strings.
+
+    Supported inputs (examples):
+    - "red" -> foreground red
+    - "fg:red bold" -> bold red foreground
+    - "fg:#RRGGBB" -> 24-bit truecolor foreground
+    - "bg:#RRGGBB" -> 24-bit truecolor background
+    - "fg:#ff0000 bold" -> combined
+    Returns (prefix, suffix). If spec is None or unrecognized returns ("", "").
+    """
+    if not spec:
+        return "", ""
+
+    spec = spec.strip()
+    if not spec:
+        return "", ""
+
+    parts = spec.split()
+    main = parts[0]
+    mods = set(p.lower() for p in parts[1:])
+
+    kind = "fg"
+    val = main
+    if ":" in main:
+        k, v = main.split(":", 1)
+        kind = k or "fg"
+        val = v
+
+    prefix_codes: list[str] = []
+
+    # bold modifier
+    if "bold" in mods:
+        prefix_codes.append("1")
+
+    # simple color names
+    simple_colors = {
+        "black": 0,
+        "red": 1,
+        "green": 2,
+        "yellow": 3,
+        "blue": 4,
+        "magenta": 5,
+        "purple": 5,
+        "cyan": 6,
+        "white": 7,
+        "grey": 7,
+        "gray": 7,
+    }
+
+    # Hex color
+    if val.startswith("#") and len(val) in (4, 7):
+        # expand #RGB to #RRGGBB
+        if len(val) == 4:
+            r = int(val[1] * 2, 16)
+            g = int(val[2] * 2, 16)
+            b = int(val[3] * 2, 16)
+        else:
+            r = int(val[1:3], 16)
+            g = int(val[3:5], 16)
+            b = int(val[5:7], 16)
+        if kind == "fg":
+            prefix = f"\x1b[38;2;{r};{g};{b}m"
+        else:
+            prefix = f"\x1b[48;2;{r};{g};{b}m"
+        # If we also have numeric codes (e.g. bold) prepend them
+        if prefix_codes:
+            # join numeric codes before the truecolor code
+            nums = ";".join(prefix_codes)
+            prefix = f"\x1b[{nums}m" + prefix
+        return prefix, "\x1b[0m"
+
+    # Named color (map to 30-37 / 40-47)
+    lname = val.lower()
+    if lname in simple_colors:
+        base = 30 if kind == "fg" else 40
+        code = base + simple_colors[lname]
+        if prefix_codes:
+            prefix = f"\x1b[{';'.join(prefix_codes)};{code}m"
+        else:
+            prefix = f"\x1b[{code}m"
+        return prefix, "\x1b[0m"
+
+    # Fallback: unrecognized
+    return "", ""
+
 
 def _clear_menu_lines(count: int) -> None:
     """Clear the last `count` lines from the terminal (ANSI)."""
@@ -327,7 +459,7 @@ def choose_action(options: List[Tuple[str, str]] | None = None, message: str = "
     return choose(message, options, default=options[0][0])
 
 
-def pause(message: str = "单击此字符或按任意键继续", style_override: Style | None = None, timeout: float | None = None) -> None:
+def pause(message: str = "单击此字符或按任意键继续", style_override: Style | None = None, timeout: float | None = None, ansi_spec: str | None = None) -> None:
     """显示一个短暂的提示，等待任意键或鼠标/触摸点击继续。
 
     - 支持键盘任意按键确认。
@@ -335,9 +467,85 @@ def pause(message: str = "单击此字符或按任意键继续", style_override:
     - 可选 `timeout`（秒）在超时后自动继续。
     """
     # Helper: console-only pause (Windows msvcrt, POSIX termios/tty/select fallback)
-    def _console_pause(msg: str, to: float | None):
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+    def _console_pause(msg: str, to: float | None, ansi_spec: str | None = None):
+        # If an ANSI spec is given, convert to escape sequences and print.
+        prefix, suffix = _style_spec_to_ansi(ansi_spec)
+
+        # If colorama is available and ansi_spec uses a simple named color
+        # (e.g. 'red' or 'fg:red'), prefer colorama Fore mapping which works
+        # on many Windows consoles even when VT isn't enabled.
+        if colorama and ansi_spec:
+            try:
+                parts = ansi_spec.split()
+                main = parts[0]
+                if ":" in main:
+                    _, val = main.split(":", 1)
+                else:
+                    val = main
+                val = val.lower()
+                fore_map = {
+                    "black": colorama.Fore.BLACK,
+                    "red": colorama.Fore.RED,
+                    "green": colorama.Fore.GREEN,
+                    "yellow": colorama.Fore.YELLOW,
+                    "blue": colorama.Fore.BLUE,
+                    "magenta": colorama.Fore.MAGENTA,
+                    "purple": colorama.Fore.MAGENTA,
+                    "cyan": colorama.Fore.CYAN,
+                    "white": colorama.Fore.WHITE,
+                    "grey": colorama.Fore.WHITE,
+                    "gray": colorama.Fore.WHITE,
+                }
+                fore = fore_map.get(val)
+                bright = "bold" in [p.lower() for p in parts[1:]]
+                if fore:
+                    style_prefix = fore + (colorama.Style.BRIGHT if bright else "")
+                    try:
+                        sys.stdout.write(style_prefix + msg + colorama.Style.RESET_ALL)
+                        sys.stdout.flush()
+                    except Exception:
+                        sys.stdout.write(msg)
+                        sys.stdout.flush()
+                    # proceed to wait for key/timeout as usual
+                    if to is not None and to <= 0:
+                        print()
+                        return
+                else:
+                    # fallback to ANSI prefix when color name not recognized
+                    if prefix:
+                        try:
+                            sys.stdout.write(prefix + msg + suffix)
+                            sys.stdout.flush()
+                        except Exception:
+                            sys.stdout.write(msg)
+                            sys.stdout.flush()
+                    else:
+                        sys.stdout.write(msg)
+                        sys.stdout.flush()
+            except Exception:
+                # on any error, fallback to raw ANSI/plain
+                if prefix:
+                    try:
+                        sys.stdout.write(prefix + msg + suffix)
+                        sys.stdout.flush()
+                    except Exception:
+                        sys.stdout.write(msg)
+                        sys.stdout.flush()
+                else:
+                    sys.stdout.write(msg)
+                    sys.stdout.flush()
+        else:
+            if prefix:
+                try:
+                    sys.stdout.write(prefix + msg + suffix)
+                    sys.stdout.flush()
+                except Exception:
+                    # fallback to plain write
+                    sys.stdout.write(msg)
+                    sys.stdout.flush()
+            else:
+                sys.stdout.write(msg)
+                sys.stdout.flush()
         if to is not None and to <= 0:
             print()
             return
@@ -389,9 +597,15 @@ def pause(message: str = "单击此字符或按任意键继续", style_override:
         except Exception:
             pass
 
-    # If not a tty, do a simple console pause
+    # If caller provided an ANSI style spec explicitly (CLI -c), prefer the
+    # console path so we can emit raw ANSI sequences that terminals will render.
+    if ansi_spec is not None:
+        _console_pause(message, timeout, ansi_spec)
+        return
+
+    # If not a tty, do a simple console pause.
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        _console_pause(message, timeout)
+        _console_pause(message, timeout, None)
         return
 
     # Otherwise try interactive prompt_toolkit pause; if that fails, fallback to console
@@ -457,10 +671,35 @@ def pause(message: str = "单击此字符或按任意键继续", style_override:
 
         app.run()
     except Exception:
-        _console_pause(message, timeout)
+        _console_pause(message, timeout, ansi_spec)
 
 
 if __name__ == "__main__":
+    # Backward-compatible shortcut: if the first argument is a path (not
+    # a subcommand like 'pause' and not an option starting with '-'),
+    # treat it as the JSON config path and run the menu directly. This
+    # avoids argparse treating the path as an unknown subcommand.
+    if len(sys.argv) > 1 and sys.argv[1] != "pause" and not sys.argv[1].startswith("-"):
+        config_path = sys.argv[1]
+        if not os.path.isfile(config_path):
+            print(f"[错误]找不到文件 '{config_path}'")
+            sys.exit(1)
+
+        loaded = load_options_from_json(config_path)
+        if not loaded:
+            print("[错误]JSON文件中没有找到有效的菜单项")
+            sys.exit(1)
+
+        try:
+            selection = choose_action(loaded)
+        except Exception as e:
+            print(f"[错误]菜单选择时发生错误: {str(e)}")
+            sys.exit(1)
+
+        with open("menutmp.txt", "w", encoding="utf-8") as f:
+            f.write(selection)
+        sys.exit(0)
+
     import argparse
 
     parser = argparse.ArgumentParser(prog="menu.py", description="菜单工具与 pause 子命令")
@@ -479,6 +718,7 @@ if __name__ == "__main__":
 
     if args.cmd == "pause":
         style_override = None
+        style_spec = None
         if args.color:
             # 如果用户传入完整 style 表达式（包含 ':' 或空格），直接使用；否则当作前景色
             col = args.color.strip()
@@ -495,7 +735,7 @@ if __name__ == "__main__":
                 except Exception:
                     style_override = None
 
-        pause(message=args.msg, style_override=style_override, timeout=args.timeout)
+        pause(message=args.msg, style_override=style_override, timeout=args.timeout, ansi_spec=style_spec)
         sys.exit(0)
 
     config_path = args.config_path
