@@ -397,6 +397,15 @@ def menu_choice(
             return None
         if 0 <= y < current_len:
             _set_selection(y, get_app())
+        # Right-click acts as Enter/confirm: exit with current selection.
+        btn = getattr(mouse_event, "button", None)
+        if btn == MouseButton.RIGHT:
+            try:
+                value = option_list[selected_index][0]
+            except Exception:
+                value = option_list[0][0]
+            get_app().exit(result=value)
+            return None
 
         if mouse_event.event_type == MouseEventType.MOUSE_UP and mouse_event.button == MouseButton.LEFT:
             now = time.monotonic()
@@ -575,6 +584,8 @@ def menu_multi_choice(
 
     def mouse_handler(mouse_event):
         nonlocal selected_index
+        # Only handle MOUSE_UP for mouse clicks to avoid double-trigger
+        # (MOUSE_DOWN then MOUSE_UP). Treat button==None (touch) as left.
         if mouse_event.event_type != MouseEventType.MOUSE_UP:
             return NotImplemented
 
@@ -584,18 +595,30 @@ def menu_multi_choice(
             return None
         if 0 <= y < current_len:
             _set_selection(y, get_app())
+        btn = getattr(mouse_event, "button", None)
+        # Right-click confirms (acts as Enter)
+        if btn == MouseButton.RIGHT:
+            try:
+                get_app().exit()
+            except Exception:
+                pass
+            return None
 
-        if mouse_event.event_type == MouseEventType.MOUSE_UP and mouse_event.button == MouseButton.LEFT:
+        is_left = (btn == MouseButton.LEFT) or (btn is None)
+        if is_left:
             now = time.monotonic()
             idx = selected_index
-            # toggle selection on click
+            # toggle selection on mouse-up/touch-up
             if idx in selected_set:
                 selected_set.remove(idx)
             else:
                 selected_set.add(idx)
-            # double click exits
+            # double click / double tap exits
             if idx == last_click["idx"] and (now - last_click["t"]) <= 0.5:
-                get_app().exit()
+                try:
+                    get_app().exit()
+                except Exception:
+                    pass
             last_click["idx"] = idx
             last_click["t"] = now
         return None
@@ -1103,7 +1126,25 @@ if __name__ == "__main__":
 
     import argparse
 
-    parser = argparse.ArgumentParser(prog="menu.py", description="菜单工具与 pause 子命令")
+    epilog = (
+        "示例:\n"
+        "  1) 单选菜单（默认）:\n"
+        "     python src/menu.py path/to/menu.json\n"
+        "  2) 多选菜单（交互中按空格切换，回车确认）:\n"
+        "     python src/menu.py path/to/menu.json -s\n"
+        "  3) pause 子命令（自定义提示/超时/颜色）:\n"
+        "     python src/menu.py pause -m \"提示文本\" -t 2 -c \"fg:#ff0000 bold\"\n\n"
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="menu.py",
+        description="菜单工具与 pause 子命令（兼容直接传入 JSON 配置文件）",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Global flag for multi-select when invoking with a JSON path
+    parser.add_argument("-s", "--s", action="store_true", dest="multi_select", help="启用多选模式：与 JSON 配合使用；交互中按 空格 切换选中，回车确认。")
     subparsers = parser.add_subparsers(dest="cmd")
 
     # pause 子命令：支持自定义消息、超时和颜色/样式
