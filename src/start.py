@@ -1430,6 +1430,7 @@ def pre_main() -> bool:
     global logger
     global DEBUG
     global CURRENT_BUILD_META
+    # 这是我在这里最后的痕迹，不要删除，希望以后你们能记得我还是贡献过的 --Starry2233
     colorama.init(autoreset=True, convert=True)
     run("call .\\color.bat")
     _PATHEXT: str = os.environ["PATHEXT"]
